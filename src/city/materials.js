@@ -1,11 +1,15 @@
 import * as THREE from "three";
 
-/** 송도식 커튼월 유리 파사드 */
+/**
+ * 밝은 커튼월 / 상가 파사드.
+ * vColor.b > 0.55 → 통유리 타워, 아니면 상가·스톤+쇼윈도
+ */
 export function createFacadeMaterial() {
   return new THREE.ShaderMaterial({
+    side: THREE.DoubleSide,
     uniforms: {
       time: { value: 0 },
-      sunDir: { value: new THREE.Vector3(0.42, 0.88, 0.2).normalize() },
+      sunDir: { value: new THREE.Vector3(0.35, 0.9, 0.25).normalize() },
     },
     vertexColors: true,
     vertexShader: `
@@ -36,58 +40,78 @@ export function createFacadeMaterial() {
 
       void main() {
         vec3 n = normalize(vNormal);
+        // DoubleSide: 뒷면도 밝게
+        if (!gl_FrontFacing) n = -n;
         vec3 v = normalize(vView);
-        float ndl = clamp(dot(n, sunDir), 0.0, 1.0);
-        float hemi = 0.42 + 0.28 * (n.y * 0.5 + 0.5);
-        float fres = pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 2.4);
+        float ndl = max(dot(n, sunDir), 0.0);
+        float hemi = 0.55 + 0.25 * (n.y * 0.5 + 0.5);
+        float fres = pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 2.2);
         float vert = abs(n.y);
+        bool isGlassTower = vColor.b > 0.55;
 
         vec3 col;
 
-        if (vert > 0.72) {
-          // 지붕 — 어두운 방수층 + 패널
-          float panel = step(0.92, fract(vPos.x * 0.25)) + step(0.92, fract(vPos.z * 0.25));
-          col = mix(vec3(0.22, 0.24, 0.27), vec3(0.3, 0.32, 0.35), clamp(panel, 0.0, 1.0));
-          col *= 0.85 + 0.15 * ndl;
+        if (vert > 0.78) {
+          // 밝은 옥상 (검정 금지)
+          col = mix(vec3(0.78, 0.82, 0.86), vec3(0.9, 0.92, 0.94), 0.5);
+          col *= 0.9 + 0.1 * ndl;
         } else {
           float u = abs(n.x) > abs(n.z) ? vPos.z : vPos.x;
-          float yy = vPos.y;
+          float yy = max(vPos.y, 0.0);
 
-          float floorH = 3.4;
-          float floorId = floor(yy / floorH);
-          float fy = fract(yy / floorH);
-          float cell = 1.55;
-          float fx = fract(u / cell + floorId * 0.02);
-          float colId = floor(u / cell);
+          if (isGlassTower) {
+            // —— 전면 통유리 커튼월 ——
+            float floorH = 3.6;
+            float floorId = floor(yy / floorH);
+            float fy = fract(yy / floorH);
+            float cell = 1.4;
+            float fx = fract(u / cell);
+            float colId = floor(u / cell);
 
-          // 알루미늄 멀리언 / 스팬드럴
-          float mullionV = 1.0 - smoothstep(0.0, 0.035, min(fx, 1.0 - fx));
-          float mullionH = 1.0 - smoothstep(0.0, 0.04, min(fy, 1.0 - fy));
-          float spandrel = smoothstep(0.0, 0.06, fy) * (1.0 - smoothstep(0.12, 0.18, fy));
-          float frame = clamp(mullionV + mullionH + spandrel * 0.9, 0.0, 1.0);
+            float mullion = 1.0 - smoothstep(0.0, 0.03, min(fx, 1.0 - fx));
+            mullion = max(mullion, 1.0 - smoothstep(0.0, 0.028, min(fy, 1.0 - fy)));
 
-          float lit = hash(vec2(colId, floorId));
-          lit = mix(0.25, 1.0, lit);
-          lit *= 0.82 + 0.18 * sin(time * 0.25 + floorId * 0.7 + colId);
+            float lit = 0.55 + 0.45 * hash(vec2(colId, floorId));
+            vec3 sky = mix(vec3(0.55, 0.78, 0.98), vec3(0.92, 0.96, 1.0), fres);
+            vec3 interior = vec3(0.95, 0.9, 0.75) * lit;
+            vec3 glass = mix(sky, interior, 0.22);
+            glass += fres * vec3(0.45, 0.55, 0.7);
+            vec3 frame = vec3(0.82, 0.88, 0.92);
+            col = mix(glass, frame, clamp(mullion * 0.85, 0.0, 1.0));
+          } else {
+            // —— 상가/스톤 + 1층 쇼윈도 ——
+            float floorH = 3.3;
+            float fy = fract(yy / floorH);
+            float fx = fract(u * 0.35);
+            float ground = step(yy, 5.5);
 
-          // 스카이 컬러 반사 유리
-          vec3 skyReflect = mix(vec3(0.45, 0.7, 0.92), vec3(0.85, 0.9, 0.95), fres);
-          vec3 warmLit = vec3(0.95, 0.88, 0.65);
-          vec3 glass = mix(skyReflect, warmLit, (1.0 - lit) * 0.35);
-          glass += fres * vec3(0.4, 0.5, 0.6);
+            vec3 stone = mix(vec3(0.88, 0.84, 0.78), vColor, 0.35);
+            // 상층 창
+            float win = step(0.12, fx) * step(fx, 0.88) * step(0.2, fy) * step(fy, 0.85);
+            vec3 upperGlass = mix(vec3(0.6, 0.78, 0.92), vec3(1.0, 0.95, 0.8), 0.2) + fres * 0.3;
+            col = mix(stone, upperGlass, win * 0.75);
 
-          vec3 metal = mix(vColor, vec3(0.72, 0.78, 0.84), 0.45);
-          col = mix(glass, metal * 0.9, frame);
+            // 1층 전면 유리 쇼윈도
+            float shopWin = step(0.08, fx) * step(fx, 0.92) * step(0.15, fy) * step(fy, 0.9);
+            vec3 shopGlass = vec3(0.75, 0.88, 0.98) + fres * 0.4;
+            shopGlass = mix(shopGlass, vec3(1.0, 0.85, 0.55), 0.15); // 간판 조명 느낌
+            col = mix(col, shopGlass, ground * shopWin * 0.9);
 
-          // 하단 그림자 (지면 접촉감)
-          col *= 0.72 + 0.28 * smoothstep(0.0, 18.0, yy);
+            // 간판 띠
+            float signband = ground * smoothstep(4.6, 4.9, yy) * (1.0 - smoothstep(5.2, 5.5, yy));
+            col = mix(col, vec3(0.95, 0.45, 0.35), signband * 0.55);
+          }
+
+          col *= 0.88 + 0.12 * smoothstep(0.0, 8.0, yy);
         }
 
         vec3 h = normalize(sunDir + v);
-        float spec = pow(max(dot(n, h), 0.0), 64.0) * (1.0 - vert);
-        col *= hemi + ndl * 0.65;
-        col += vec3(0.7, 0.8, 0.95) * spec * 0.45;
-        col += fres * vec3(0.1, 0.14, 0.2) * (1.0 - vert);
+        float spec = pow(max(dot(n, h), 0.0), 72.0) * (1.0 - vert);
+        col *= hemi + ndl * 0.55;
+        col += vec3(0.85, 0.92, 1.0) * spec * 0.55;
+        col += fres * vec3(0.12, 0.16, 0.22) * (1.0 - vert);
+        // 최저 밝기 보장 — 검정 건물 방지
+        col = max(col, vec3(0.28, 0.32, 0.36));
 
         gl_FragColor = vec4(col, 1.0);
       }
@@ -165,7 +189,6 @@ export function createGrassMaterial() {
         float n3 = noise(vXZ * 1.2);
         vec3 col = mix(vec3(0.16,0.34,0.15), vec3(0.34,0.55,0.24), n);
         col = mix(col, vec3(0.5,0.68,0.3), n2 * 0.4);
-        // 꽃/하이라이트 점
         float flower = step(0.93, n3);
         col = mix(col, vec3(0.95,0.85,0.45), flower * 0.55);
         float ndl = 0.55 + 0.45 * max(dot(vec3(0.,1.,0.), sunDir), 0.0);
@@ -197,12 +220,9 @@ export function createAsphaltMaterial() {
       varying vec3 vNormal;
       float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
       void main() {
-        float grit = hash(floor(vPos.xz * 10.0)) * 0.1;
-        vec3 col = vec3(0.18, 0.19, 0.21) + grit;
-        // 미끄러운 하이라이트 밴드
-        float wet = 0.04 * sin(vPos.x * 0.15) * sin(vPos.z * 0.12);
-        col += wet;
-        float ndl = 0.4 + 0.6 * clamp(dot(normalize(vNormal), sunDir), 0.0, 1.0);
+        float grit = hash(floor(vPos.xz * 12.0)) * 0.08;
+        vec3 col = vec3(0.24, 0.25, 0.27) + grit;
+        float ndl = 0.5 + 0.5 * clamp(dot(normalize(vNormal), sunDir), 0.0, 1.0);
         col *= ndl;
         gl_FragColor = vec4(col, 1.0);
       }

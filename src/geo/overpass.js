@@ -14,6 +14,7 @@ function buildQuery(bbox) {
 (
   way["building"](${south},${west},${north},${east});
   relation["building"](${south},${west},${north},${east});
+  way["shop"](${south},${west},${north},${east});
   way["highway"](${south},${west},${north},${east});
   way["natural"="water"](${south},${west},${north},${east});
   way["water"](${south},${west},${north},${east});
@@ -22,6 +23,8 @@ function buildQuery(bbox) {
   way["leisure"="park"](${south},${west},${north},${east});
   relation["leisure"="park"](${south},${west},${north},${east});
   way["landuse"="grass"](${south},${west},${north},${east});
+  way["landuse"="retail"](${south},${west},${north},${east});
+  way["landuse"="commercial"](${south},${west},${north},${east});
 );
 out body;
 >;

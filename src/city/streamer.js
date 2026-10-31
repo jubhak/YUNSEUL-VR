@@ -111,39 +111,37 @@ export class CityStreamer {
 
   requestAround(x, z, { radius = STREAM.loadRadius, priority = false } = {}) {
     const { tx, tz } = this.worldToTile(x, z);
-    const wanted = [];
+    this._playerTile = { tx, tz };
+
     for (let dz = -radius; dz <= radius; dz++) {
       for (let dx = -radius; dx <= radius; dx++) {
         const key = tileKey(tx + dx, tz + dz);
         const dist = Math.max(Math.abs(dx), Math.abs(dz));
-        wanted.push({ key, tx: tx + dx, tz: tz + dz, dist });
+        const bbox = this.tileBbox(tx + dx, tz + dz);
+        if (!this.inSongdoBounds(bbox)) continue;
+
+        const existing = this.tiles.get(key);
+        if (existing) {
+          existing.dist = dist;
+          if (existing.state === "queued") {
+            const q = this.queue.find((j) => j.key === key);
+            if (q) q.dist = dist;
+          }
+          continue;
+        }
+
+        this.tiles.set(key, {
+          state: "queued",
+          tx: tx + dx,
+          tz: tz + dz,
+          dist,
+        });
+        const job = { key, tx: tx + dx, tz: tz + dz, dist };
+        if (priority && dist === 0) this.queue.unshift(job);
+        else this.queue.push(job);
       }
     }
-    wanted.sort((a, b) => a.dist - b.dist);
 
-    for (const w of wanted) {
-      const bbox = this.tileBbox(w.tx, w.tz);
-      if (!this.inSongdoBounds(bbox)) continue;
-      const existing = this.tiles.get(w.key);
-      if (
-        existing &&
-        (existing.state === "ready" ||
-          existing.state === "loading" ||
-          existing.state === "queued")
-      ) {
-        continue;
-      }
-      this.tiles.set(w.key, {
-        state: "queued",
-        tx: w.tx,
-        tz: w.tz,
-        dist: w.dist,
-      });
-      if (priority && w.dist === 0) this.queue.unshift(w);
-      else this.queue.push(w);
-    }
-
-    // unload far tiles
     const unloadR = STREAM.unloadRadius;
     for (const [key, tile] of this.tiles) {
       const dx = Math.abs(tile.tx - tx);
@@ -156,35 +154,57 @@ export class CityStreamer {
     this.#pump();
   }
 
-  async boot(x, z) {
-    // 즉시 진입: 시그니처는 이미 배치됨. OSM 타일은 백그라운드 스트리밍.
-    this.onStatus?.("주변 도시 스트리밍 시작…");
+  async boot(x, z, { onProgress } = {}) {
+    this.onStatus?.("현재 위치 빠른 로딩…");
+    // 1) 현재 타일만 우선
     this.requestAround(x, z, { radius: STREAM.bootRadius, priority: true });
+    // 2) 주변은 백그라운드 큐에만 넣고 대기하지 않음
     this.requestAround(x, z, { radius: STREAM.preloadRadius });
     this.#pump();
-    // 캐시된 중심 타일이 있으면 짧게만 기다려 첫 화면을 채움
+
     const { tx, tz } = this.worldToTile(x, z);
-    const key = tileKey(tx, tz);
+    const centerKey = tileKey(tx, tz);
     const start = performance.now();
-    while (performance.now() - start < 1200) {
-      const t = this.tiles.get(key);
+
+    while (performance.now() - start < STREAM.bootWaitMs) {
+      const t = this.tiles.get(centerKey);
+      const elapsed = performance.now() - start;
+      const pct = Math.min(0.95, elapsed / STREAM.bootWaitMs);
+      onProgress?.(
+        t?.state === "ready" ? 1 : pct,
+        t?.state === "ready"
+          ? "현재 구역 준비됨"
+          : `빠른 시작 로딩… ${Math.ceil((STREAM.bootWaitMs - elapsed) / 1000)}s`,
+      );
+      this.onStatus?.(
+        t?.state === "ready"
+          ? "스트리밍 중"
+          : `시작 타일 로딩… (${Math.round(elapsed / 1000)}s)`,
+      );
       if (t?.state === "ready" || t?.state === "error") break;
       this.#pump();
-      await new Promise((r) => setTimeout(r, 40));
+      await new Promise((r) => setTimeout(r, 50));
     }
-    this.onStatus?.("탐색 중 — 주변 자동 로딩");
+
+    this.onStatus?.("GTA식 스트리밍 — 이동하며 주변 로딩");
+    onProgress?.(1, "입장 — 주변은 이동하며 자동 로딩");
   }
 
   update(x, z) {
     const cur = this.worldToTile(x, z);
     const key = tileKey(cur.tx, cur.tz);
+    // 타일 변경 시 풀 프리로드, 같은 타일에서도 주기적으로 큐 재정렬
     if (this._lastTile !== key) {
       this._lastTile = key;
       this.requestAround(x, z, { radius: STREAM.preloadRadius });
+    } else {
+      this._streamTick = (this._streamTick || 0) + 1;
+      if (this._streamTick % 30 === 0) {
+        this.requestAround(x, z, { radius: STREAM.loadRadius });
+      }
     }
     this.#pump();
 
-    // animate shared materials
     const t = performance.now() * 0.001;
     if (this.facadeMat.uniforms?.time) this.facadeMat.uniforms.time.value = t;
     if (this.waterMat.uniforms?.time) this.waterMat.uniforms.time.value = t;
@@ -192,11 +212,19 @@ export class CityStreamer {
   }
 
   #pump() {
+    // 플레이어와 가까운 타일 먼저
+    if (this._playerTile) {
+      for (const job of this.queue) {
+        job.dist = Math.max(
+          Math.abs(job.tx - this._playerTile.tx),
+          Math.abs(job.tz - this._playerTile.tz),
+        );
+      }
+    }
     while (
       this.activeFetches < STREAM.maxConcurrentFetches &&
       this.queue.length
     ) {
-      // prefer closer tiles
       this.queue.sort((a, b) => a.dist - b.dist);
       const job = this.queue.shift();
       const tile = this.tiles.get(job.key);

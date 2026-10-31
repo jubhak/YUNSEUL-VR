@@ -41,13 +41,13 @@ export function createHud() {
     <div class="card">
       <h1>송도 시티 VR</h1>
       <p class="subtitle">
-        근처만 먼저 불러와 바로 들어가고, 이동하면서 주변을 미리 로딩합니다.
-        센트럴파크 수로·시그니처 타워를 중심으로 송도를 체험하세요.
+        GTA처럼 현재 위치만 빠르게 불러 입장하고, 이동하면서 캐릭터 주변 도시를
+        계속 스트리밍합니다. (시작 로딩 ≤ 20초)
       </p>
       <ul>
-        <li>청크 스트리밍 — 시작 대기 최소화</li>
-        <li>마우스 감도 낮춤 · 걷기/자전거/차 속도 재조정</li>
-        <li>NEATT·컨벤시아·G-Tower·센트럴파크 수로 보강</li>
+        <li>빠른 시작 + 이동 중 주변 프리로드</li>
+        <li>통유리·상가·차도 · 송도 전역 이동</li>
+        <li>센트럴파크 수로·시그니처 타워</li>
       </ul>
       <div class="actions">
         <button class="action-btn primary" data-action="start" type="button">바로 시작</button>

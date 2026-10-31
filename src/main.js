@@ -64,9 +64,12 @@ async function startCity({ forceRefresh = false } = {}) {
   player._yawVel = 0;
   player._pitchVel = 0;
 
-  hud.setProgress(70, "즉시 진입 — 주변 OSM 스트리밍…");
-  // 랜드마크로 바로 시작, OSM은 백그라운드
-  const bootPromise = streamer.boot(player.position.x, player.position.z);
+  hud.setProgress(15, "현재 위치 빠른 로딩 (최대 18초)…");
+  await streamer.boot(player.position.x, player.position.z, {
+    onProgress: (pct, msg) => {
+      hud.setProgress(15 + pct * 80, msg);
+    },
+  });
   player.setColliders(streamer.getColliders());
   loaded = true;
 
@@ -77,9 +80,7 @@ async function startCity({ forceRefresh = false } = {}) {
     tiles: streamer.stats.tiles,
     speed: 0,
   });
-  hud.setProgress(100, "준비됨 — 주변은 이동하며 자동 로딩됩니다");
-
-  bootPromise.catch((e) => console.warn("stream boot", e));
+  hud.setProgress(100, "입장 완료 — 이동하면 주변을 계속 로딩합니다");
 }
 
 hud.on((action) => {

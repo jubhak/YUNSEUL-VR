@@ -29,15 +29,39 @@ function parseHeight(tags = {}) {
   if (Number.isFinite(minLevels) && minLevels > 0) {
     return Math.min(minLevels * 3.2 + 3.2, 350);
   }
-  // Songdo high-rises often lack height tags — bias office/apartments taller
   const kind = tags.building;
-  if (kind === "apartments" || kind === "residential") return 36 + Math.random() * 24;
+  if (kind === "apartments" || kind === "residential") return 40 + Math.random() * 28;
   if (kind === "commercial" || kind === "office" || kind === "yes") {
-    return 18 + Math.random() * 40;
+    return 22 + Math.random() * 48;
   }
-  if (kind === "retail" || kind === "shop") return 8 + Math.random() * 6;
+  if (kind === "retail" || kind === "shop" || kind === "supermarket") {
+    return 9 + Math.random() * 8;
+  }
+  if (kind === "hotel") return 50 + Math.random() * 40;
   if (kind === "garage" || kind === "shed" || kind === "roof") return 3.5;
-  return 12 + Math.random() * 16;
+  return 14 + Math.random() * 18;
+}
+
+function buildingStyleFromTags(tags = {}) {
+  const kind = tags.building;
+  if (
+    kind === "retail" ||
+    kind === "shop" ||
+    kind === "supermarket" ||
+    kind === "commercial" ||
+    kind === "mall" ||
+    kind === "kiosk" ||
+    tags.shop ||
+    tags.amenity === "marketplace" ||
+    tags.amenity === "restaurant" ||
+    tags.amenity === "cafe"
+  ) {
+    return "retail";
+  }
+  if (kind === "office" || kind === "apartments" || kind === "hotel" || kind === "yes") {
+    return "glass";
+  }
+  return "mixed";
 }
 
 function roadWidth(tags = {}) {
@@ -53,17 +77,17 @@ function roadWidth(tags = {}) {
     case "trunk":
       return 16;
     case "primary":
-      return 12;
+      return 14;
     case "secondary":
-      return 10;
+      return 12;
     case "tertiary":
-      return 8;
+      return 10;
     case "residential":
     case "unclassified":
     case "living_street":
-      return 6.5;
+      return 8.5;
     case "service":
-      return 4.5;
+      return 5.5;
     case "cycleway":
       return 2.5;
     case "footway":
@@ -114,15 +138,17 @@ export function parseOsmCity(osmData, project) {
     const coords = wayCoords(way, project);
     if (!coords) continue;
 
-    if (tags.building) {
+    if (tags.building || tags.shop) {
       if (coords.length < 3) continue;
       const ring = ensureCCW(coords);
+      const type = tags.building || (tags.shop ? "retail" : "yes");
       buildings.push({
         id: way.id,
         footprint: ring,
-        height: parseHeight(tags),
+        height: parseHeight({ ...tags, building: type }),
         name: tags.name || tags["name:ko"] || "",
-        type: tags.building,
+        type,
+        style: buildingStyleFromTags({ ...tags, building: type }),
       });
       continue;
     }
@@ -149,6 +175,21 @@ export function parseOsmCity(osmData, project) {
       if (coords.length >= 3) {
         parks.push({ id: way.id, footprint: ensureCCW(coords) });
       }
+      continue;
+    }
+
+    if (
+      (tags.landuse === "retail" || tags.landuse === "commercial") &&
+      coords.length >= 3
+    ) {
+      buildings.push({
+        id: way.id,
+        footprint: ensureCCW(coords),
+        height: 10 + Math.random() * 8,
+        name: tags.name || tags["name:ko"] || "",
+        type: "retail",
+        style: "retail",
+      });
     }
   }
 
@@ -164,14 +205,16 @@ export function parseOsmCity(osmData, project) {
     }
     if (!outers.length) continue;
 
-    if (tags.building) {
+    if (tags.building || tags.shop) {
+      const type = tags.building || "retail";
       for (const ring of outers) {
         buildings.push({
           id: `rel-${rel.id}`,
           footprint: ring,
-          height: parseHeight(tags),
+          height: parseHeight({ ...tags, building: type }),
           name: tags.name || tags["name:ko"] || "",
-          type: tags.building,
+          type,
+          style: buildingStyleFromTags({ ...tags, building: type }),
         });
       }
     } else if (tags.natural === "water" || tags.water) {
