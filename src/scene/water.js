@@ -37,7 +37,7 @@ export function installCanalReflection(group,sunDirection) {
   const reflectionMaterial=water.material,pbr=main.material;
   const reflect=water.onBeforeRender;
   water.onBeforeRender=function(renderer,scene,camera,...args) {
-    if (!renderer.xr.isPresenting) reflect.call(this,renderer,scene,camera,...args);
+    if (!renderer.xr.isPresenting && this.material===reflectionMaterial) reflect.call(this,renderer,scene,camera,...args);
   };
   group.remove(main);main.geometry.dispose();group.add(water);
   return {

@@ -6,7 +6,7 @@ export function createAtmosphere(scene) {
   group.name = "atmosphere";
   const grassMat = createGrassMaterial();
   grassMat.userData.shared = true;
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(18000,18000),grassMat);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(60000,60000),grassMat);
   ground.rotation.x = -Math.PI/2;
   ground.position.y = -0.22;
   ground.receiveShadow = true;

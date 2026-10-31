@@ -34,6 +34,7 @@ async function startCity({ forceRefresh = false } = {}) {
   if (forceRefresh) clearOsmCache();
 
   loaded = false;
+  player.setColliders([]);
   streamer?.clear();
   hud.setProgress(12, "센트럴파크 지도·수변 환경 준비…");
 
@@ -71,6 +72,18 @@ async function startCity({ forceRefresh = false } = {}) {
     },
   });
   player.setColliders(streamer.getColliders());
+  hud.setDestinations(streamer.destinations || [], (destination) => {
+    const p=destination.arrival || destination.position;
+    player.position.set(p.x,player.mode.eyeHeight,p.z);
+    player.velocity.set(0,0,0);player.verticalVel=0;player.onGround=true;
+    player.keys.clear();player.pitch=0;
+    if(destination.position) {
+      player.yaw=Math.atan2(-(destination.position.x-p.x),-(destination.position.z-p.z));
+      const distance=Math.hypot(destination.position.x-p.x,destination.position.z-p.z);
+      player.pitch=Math.min(0.42,Math.atan2((destination.height||0)*0.35,Math.max(distance,1)));
+    }
+    streamer.requestAround(p.x,p.z);player.update(0);
+  });
   loaded = true;
 
   hud.setStats({
@@ -90,7 +103,7 @@ hud.on((action) => {
     hud.showOverlay();
     hud.setBusy(true);
     // Request during the actual click event. Pointer lock after async loading may be blocked.
-    player.requestLock();
+    // Loading and keyboard movement never require pointer lock.
     startCity({ forceRefresh: action === "refresh" })
       .then(() => hud.hideOverlay())
       .catch(e => { console.error(e); hud.setProgress(0, `오류: ${e.message}`); player.exitLock(); })
@@ -105,11 +118,13 @@ hud.on((action) => {
   }
 });
 
-renderer.domElement.addEventListener("click", () => {
-  if (loaded && !player.locked && !renderer.xr.isPresenting) {
-    player.requestLock();
-  }
-});
+// Auto-load: no start/mode/lock button is needed to begin exploring.
+starting = true;
+hud.setBusy(true);
+startCity().then(() => hud.hideOverlay()).catch(e => {
+  console.error(e); hud.setProgress(0, `지도 로딩 실패: ${e.message} — 다시 시도 버튼을 이용하세요`);
+}).finally(() => { starting=false; hud.setBusy(false); });
+
 
 if (import.meta.env.DEV) {
   window.__YUNSEUL_DEV__ = { player, scene, camera, renderer, get streamer() { return streamer; } };
@@ -152,7 +167,7 @@ renderer.setAnimationLoop(() => {
   atmosphere?.update(dt, t, player.position);
 
   if (loaded && streamer) {
-    streamer.update(player.position.x, player.position.z, t, renderer.xr.isPresenting);
+    streamer.update(player.position.x, player.position.z, t, renderer.xr.isPresenting || renderer.userData.lowPower);
     colliderTick += dt;
     if (colliderTick > 0.4) {
       colliderTick = 0;

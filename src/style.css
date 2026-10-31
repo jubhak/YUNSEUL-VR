@@ -333,3 +333,8 @@ button:disabled { opacity:.55; cursor:wait; }
 #mode-bar { bottom:30px; }
 @media(max-width:1000px) { #help { display:none; } }
 @media(max-width:720px) { #status { display:none!important; } #overlay .card { padding:28px; } #mode-bar { bottom:36px; } }
+
+#tour-bar { position:fixed; left:20px; bottom:22px; z-index:12; padding:12px 16px; pointer-events:auto; }
+#tour-bar label { font-size:12px; color:#dde8e8; }
+#tour-select { display:block; margin-top:6px; padding:8px; max-width:min(320px,75vw); border:1px solid #718b90; border-radius:6px; color:#eaf4f4; background:#20343c; }
+@media(max-width:700px) { #help { display:none; } #tour-bar {left:12px;bottom:14px;} #status {max-width:160px;} }

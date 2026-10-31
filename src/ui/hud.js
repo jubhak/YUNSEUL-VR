@@ -5,7 +5,7 @@ export function createHud() {
     <div id="top-bar">
       <div id="brand" class="panel">
         <h1>YUNSEUL VR · 송도</h1>
-        <p>CENTRAL PARK · 수변 산책</p>
+        <p>SONGDO · 실제 지도 기반 · 건물 외관 근사</p>
       </div>
       <div id="status" class="panel">
         <div class="row"><span class="label">모드</span><span data-field="mode">걷기</span></div>
@@ -20,19 +20,15 @@ export function createHud() {
     <div id="crosshair"></div>
     <div id="map-attribution">지도 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a> · ODbL</div>
 
-    <div id="mode-bar" class="panel">
-      <button class="mode-btn active" data-mode="walk" type="button">걷기 (1)</button>
-      <button class="mode-btn" data-mode="bike" type="button">자전거 (2)</button>
-      <button class="mode-btn" data-mode="car" type="button">자동차 (3)</button>
-      <button class="action-btn" data-action="lock" type="button">마우스 잠금</button>
-    </div>
+    <div id="tour-bar" class="panel"><label>송도 장소 이동 <select id="tour-select" aria-label="송도 장소 이동"><option value="">목적지 선택</option></select></label></div>
 
     <div id="help" class="panel">
       <strong>조작</strong><br/>
-      WASD — 이동 · 마우스 — 시점 · 아래 보기 최대 18°<br/>
+      ↑ / ↓ — 앞 / 뒤 · ← / → — 시선 회전<br/>
+      W/S — 앞/뒤 · A/D — 옆걸음 · 마우스 — 시점<br/>
       휠 — 확대/축소<br/>
       Shift 가속 · Space 점프(걷기)<br/>
-      1 / 2 / 3 모드 · ESC 잠금 해제
+      기본 걷기 · 1 / 2 / 3 — 속도 전환 (선택)
     </div>
   `;
 
@@ -41,7 +37,7 @@ export function createHud() {
   overlay.innerHTML = `
     <div class="card">
       <div class="eyebrow">YUNSEUL / SONGDO</div>
-      <h1>센트럴파크,<br/>물빛을 따라 걷다.</h1>
+      <h1>송도,<br/>도시를 따라 걷다.</h1>
       <p class="subtitle">
         송도 센트럴파크 수변 산책로에서 시작합니다.
         실제 지도 위에 햇살, 물결, 나무 그늘을 더했습니다.
@@ -56,7 +52,7 @@ export function createHud() {
         <button class="action-btn secondary" data-action="refresh" type="button">캐시 비우고 다시</button>
       </div>
       <div id="loading-bar"><span></span></div>
-      <div id="loading-text">준비됨</div>
+      <div id="loading-text">지도 자동 로딩 중</div>
     </div>
   `;
 
@@ -112,6 +108,12 @@ export function createHud() {
     },
     setStreamStatus(msg) {
       if (fields.stream) fields.stream.textContent = msg;
+    },
+    setDestinations(destinations, onSelect) {
+      const select=root.querySelector("#tour-select");
+      select.replaceChildren(new Option("목적지 선택", ""));
+      for (const d of destinations) {const opt=document.createElement("option");opt.value=d.id;opt.textContent=d.name;select.appendChild(opt);}
+      select.onchange=()=>{const d=destinations.find(d=>d.id===select.value);if(d)onSelect(d);select.value="";select.blur();};
     },
     setActiveMode(id) {
       modeButtons.forEach((btn) => {

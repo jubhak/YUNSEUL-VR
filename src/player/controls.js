@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { MODES, LOOK } from "../config.js";
+import { resolveMovement } from "./collision.js";
 import { clampPitch } from "./look.js";
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -32,6 +33,8 @@ export class PlayerController {
 
     this.keys = new Set();
     this._onKeyDown = (e) => {
+      if (e.target?.closest?.("input,textarea,select,[contenteditable=true]")) return;
+      if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"].includes(e.code)) e.preventDefault();
       this.keys.add(e.code);
       if (e.code === "Digit1") this.setMode("walk");
       if (e.code === "Digit2") this.setMode("bike");
@@ -84,7 +87,7 @@ export class PlayerController {
   }
 
   #onMouseMove(e) {
-    if (!this.locked) return;
+    // Unlocked canvas movement works immediately; pointer lock is optional, not a gate.
     // 프레임당 여러 mousemove가 올 수 있어 합산하되,
     // update에서 각속도 상한으로만 소비하고 나머지는 전부 폐기
     this._yawVel -= e.movementX * LOOK.yawGain * 60;
@@ -108,8 +111,8 @@ export class PlayerController {
     let strafe = 0;
     if (this.keys.has("KeyW") || this.keys.has("ArrowUp")) forward += 1;
     if (this.keys.has("KeyS") || this.keys.has("ArrowDown")) forward -= 1;
-    if (this.keys.has("KeyA") || this.keys.has("ArrowLeft")) strafe -= 1;
-    if (this.keys.has("KeyD") || this.keys.has("ArrowRight")) strafe += 1;
+    if (this.keys.has("KeyA")) strafe -= 1;
+    if (this.keys.has("KeyD")) strafe += 1;
 
     const dir = new THREE.Vector3();
     if (!forward && !strafe) return dir;
@@ -128,29 +131,7 @@ export class PlayerController {
   }
 
   #resolveCollisions(nextX, nextZ, radius = 0.55) {
-    let x = nextX;
-    let z = nextZ;
-    for (const c of this.colliders) {
-      if (c.height < 1.2) continue;
-      const minX = c.minX - radius;
-      const maxX = c.maxX + radius;
-      const minZ = c.minZ - radius;
-      const maxZ = c.maxZ + radius;
-      if (x > minX && x < maxX && z > minZ && z < maxZ) {
-        const dxL = x - minX;
-        const dxR = maxX - x;
-        const dzB = z - minZ;
-        const dzT = maxZ - z;
-        const m = Math.min(dxL, dxR, dzB, dzT);
-        if (m === dxL) x = minX;
-        else if (m === dxR) x = maxX;
-        else if (m === dzB) z = minZ;
-        else z = maxZ;
-        this.velocity.x *= 0.15;
-        this.velocity.z *= 0.15;
-      }
-    }
-    return { x, z };
+    return resolveMovement(this.position, {x:nextX,z:nextZ}, this.colliders, radius);
   }
 
   #applyLook(dt) {
@@ -160,7 +141,8 @@ export class PlayerController {
     this._yawVel = 0;
     this._pitchVel = 0;
 
-    this.yaw += yawRate * dt;
+    const turn = Number(this.keys.has("ArrowLeft")) - Number(this.keys.has("ArrowRight"));
+    this.yaw += (yawRate + turn * LOOK.keyboardYawRate) * dt;
     this.pitch = clampPitch(this.pitch + pitchRate * dt, this.camera.fov);
   }
 
@@ -173,8 +155,9 @@ export class PlayerController {
       this.keys.has("ShiftLeft") || this.keys.has("ShiftRight") ? 1.25 : 1;
 
     if (wish.lengthSq() > 0) {
-      this.velocity.x += wish.x * mode.accel * sprint * dt;
-      this.velocity.z += wish.z * mode.accel * sprint * dt;
+      const speed = Math.min(Math.hypot(this.velocity.x,this.velocity.z) + mode.accel*sprint*dt, mode.maxSpeed*sprint);
+      this.velocity.x = wish.x * speed;
+      this.velocity.z = wish.z * speed;
     } else {
       const damp = Math.exp(-mode.friction * dt);
       this.velocity.x *= damp;

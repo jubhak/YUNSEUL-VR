@@ -10,9 +10,12 @@ export function createScene(container) {
   scene.fog = new THREE.FogExp2(0xc3d4de, 0.00017);
   const camera = new THREE.PerspectiveCamera(LOOK.fovDefault,innerWidth/innerHeight,0.25,8000);
   const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:"high-performance" });
-  renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));
+  const gl=renderer.getContext(),info=gl.getExtension('WEBGL_debug_renderer_info');
+  const gpu=info?gl.getParameter(info.UNMASKED_RENDERER_WEBGL):'';
+  renderer.userData={lowPower:new URLSearchParams(location.search).get('quality')==='low'||/SwiftShader|llvmpipe|Software/i.test(gpu)};
+  renderer.setPixelRatio(renderer.userData.lowPower?1:Math.min(devicePixelRatio,1.75));
   renderer.setSize(innerWidth,innerHeight);
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = !renderer.userData.lowPower;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;

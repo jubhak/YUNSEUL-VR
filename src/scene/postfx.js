@@ -5,6 +5,7 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import * as THREE from "three";
 
 export function createPostFx(renderer, scene, camera) {
+  if(renderer.userData?.lowPower)return {render(){renderer.render(scene,camera);},dispose(){}};
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
 

@@ -1,7 +1,7 @@
 import { CACHE_KEY_PREFIX, CACHE_TTL_MS } from "../config.js";
 
 const OVERPASS_ENDPOINTS = [
-  ...(import.meta.env.DEV ? ["/api/overpass"] : []),
+  ...(import.meta.env?.DEV ? ["/api/overpass"] : []),
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
   "https://overpass.nchc.org.tw/api/interpreter",
@@ -14,6 +14,11 @@ function buildQuery(bbox) {
 (
   way["building"](${south},${west},${north},${east});
   relation["building"](${south},${west},${north},${east});
+  nwr["amenity"="parking"](${south},${west},${north},${east});
+  nwr["tourism"="artwork"](${south},${west},${north},${east});
+  nwr["leisure"="golf_course"](${south},${west},${north},${east});
+  way["golf"](${south},${west},${north},${east});
+  way["building:part"](${south},${west},${north},${east});
   way["shop"](${south},${west},${north},${east});
   way["highway"](${south},${west},${north},${east});
   way["natural"="water"](${south},${west},${north},${east});

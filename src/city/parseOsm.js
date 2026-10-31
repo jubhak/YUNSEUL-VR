@@ -56,6 +56,8 @@ function roadWidth(t) {
 function category(t) {
   if (t.building || t["building:part"]) return "buildings";
   if (t.natural === "water" || t.water || t.waterway === "riverbank") return "waters";
+  if (["golf_course","nature_reserve","recreation_ground"].includes(t.leisure) || ["fairway","green","rough","bunker"].includes(t.golf)) return "parks";
+  if (t.amenity === "parking") return "parking";
   if (t.leisure === "park" || t.leisure === "garden" || ["grass","forest","meadow"].includes(t.landuse) || ["wood","grassland"].includes(t.natural)) return "parks";
   return null;
 }
@@ -63,17 +65,20 @@ export function parseOsmCity(data, project) {
   const elements = data.elements || [];
   const nodes = new Map(elements.filter(e => e.type === "node").map(e => [e.id,e]));
   const ways = new Map(elements.filter(e => e.type === "way").map(e => [e.id,e]));
-  const city = {buildings:[],roads:[],waters:[],parks:[]};
+  const city = {buildings:[],roads:[],waters:[],parks:[],parking:[],artworks:[]};
   const consumed = new Set();
-  const coords = ids => ids.map(id => nodes.get(id)).filter(Boolean).map(n => project(n.lon,n.lat));
+  const coords = ids => ids.every(id=>nodes.has(id)) ? ids.map(id => {const n=nodes.get(id);return project(n.lon,n.lat);}) : [];
   function add(kind,id,t,footprint,holes=[]) {
     if (footprint.length < 3) return;
-    const item = {id,footprint,holes,name:t["name:ko"] || t.name || ""};
+    const item = {id,footprint,holes,name:t["name:ko"] || t.name || "", tags:t};
     if (kind === "buildings") Object.assign(item, {
       height:height(t,id), type:t.building || "yes",
       style:(t.building === "office" || t.building === "hotel") ? "glass" : "mixed",
     });
     city[kind].push(item);
+  }
+  for (const n of nodes.values()) {
+    if (n.tags?.tourism === "artwork") city.artworks.push({id:`node-${n.id}`, position:project(n.lon,n.lat), name:n.tags["name:ko"] || n.tags.name || "이름 미등록 작품", tags:n.tags});
   }
   for (const rel of elements.filter(e => e.type === "relation")) {
     const t = rel.tags || {}, kind = category(t); if (!kind) continue;

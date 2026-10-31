@@ -1,0 +1,235 @@
+{
+  "initial": {
+    "position": [
+      0,
+      1.7,
+      0
+    ],
+    "yaw": 2.1533634437912346,
+    "locked": false,
+    "tiles": {
+      "buildings": 448,
+      "roads": 1055,
+      "tiles": 20
+    },
+    "signatures": [
+      "signature-convensia-228781845",
+      "signature-neatt-312895052",
+      "signature-tribowl-313555557",
+      "signature-g-tower-314752454",
+      "signature-central-hotel-314997470",
+      "signature-posco-enc-316290866",
+      "signature-retail-320229389",
+      "signature-hanok-376801783",
+      "signature-convensia-700679282",
+      "signature-artfore-989805727",
+      "signature-hanok-1035501462",
+      "signature-hanok-1035501463",
+      "signature-hanok-1035501464",
+      "signature-hanok-1035501467",
+      "signature-hanok-1035501468",
+      "signature-hanok-1035501469",
+      "signature-hanok-1035501470",
+      "signature-hanok-1035501471",
+      "signature-hanok-1035501473",
+      "signature-hanok-1035501474",
+      "signature-hanok-1035501475",
+      "signature-hanok-1035501476",
+      "signature-hanok-1035502594",
+      "signature-hanok-1035502595",
+      "signature-artfore-1037312155",
+      "signature-artfore-1037312156",
+      "signature-holiday-1039248302"
+    ],
+    "drawcalls": 132,
+    "triangles": 196713,
+    "modeButtons": 0
+  },
+  "afterTurn": {
+    "position": [
+      0,
+      1.7,
+      0
+    ],
+    "yaw": 1.3483634437912393
+  },
+  "afterWalk": {
+    "position": [
+      -8.23694589407515,
+      1.7,
+      -1.8629941862707478
+    ],
+    "yaw": 1.3483634437912393
+  },
+  "destinations": [
+    {
+      "value": "central-park",
+      "name": "센트럴파크 수변 출발점"
+    },
+    {
+      "value": "building-rel-10147599-0",
+      "name": "현대프리미엄 아울렛 송도"
+    },
+    {
+      "value": "building-196304460",
+      "name": "홈플러스"
+    },
+    {
+      "value": "building-228781845",
+      "name": "송도컨벤시아"
+    },
+    {
+      "value": "building-312895052",
+      "name": "포스코타워-송도"
+    },
+    {
+      "value": "building-313555557",
+      "name": "트라이볼"
+    },
+    {
+      "value": "building-314752454",
+      "name": "G타워"
+    },
+    {
+      "value": "building-314997470",
+      "name": "송도센트럴파크호텔"
+    },
+    {
+      "value": "building-316290866",
+      "name": "포스코건설 송도사옥"
+    },
+    {
+      "value": "building-317191825",
+      "name": "홈플러스"
+    },
+    {
+      "value": "building-320229389",
+      "name": "코스트코 송도점"
+    },
+    {
+      "value": "building-700679282",
+      "name": "송도컨벤시아"
+    },
+    {
+      "value": "building-1039248302",
+      "name": "홀리데이인 인천송도"
+    },
+    {
+      "value": "zone-376712704",
+      "name": "아트센터 인천"
+    },
+    {
+      "value": "zone-384282248",
+      "name": "송도한옥마을"
+    },
+    {
+      "value": "zone-989805723",
+      "name": "송도아트포레"
+    },
+    {
+      "value": "zone-989805724",
+      "name": "송도아트포레푸르지오시티오피스텔"
+    },
+    {
+      "value": "zone-1035501454",
+      "name": "경원재 앰배서더 인천"
+    },
+    {
+      "value": "park-310852063",
+      "name": "잭니클라우스 골프클럽"
+    },
+    {
+      "value": "park-384610578",
+      "name": "글로벌파크"
+    },
+    {
+      "value": "poi-way-315200741",
+      "name": "송도 더샵 센트럴파크 1차"
+    },
+    {
+      "value": "poi-way-384325285",
+      "name": "송도 더샵 센트럴파크 2차"
+    },
+    {
+      "value": "poi-way-236366209",
+      "name": "해양경찰청"
+    },
+    {
+      "value": "poi-relation-19249532",
+      "name": "인천대학교 송도캠퍼스"
+    },
+    {
+      "value": "landmark-road",
+      "name": "랜드마크로"
+    }
+  ],
+  "tours": [
+    {
+      "position": [
+        -425.71835708424123,
+        1.7,
+        -252.77432400044034
+      ],
+      "stats": {
+        "buildings": 452,
+        "roads": 1057,
+        "tiles": 25
+      },
+      "drawcalls": 187
+    },
+    {
+      "position": [
+        1745.113604372712,
+        1.7,
+        1472.240395999431
+      ],
+      "stats": {
+        "buildings": 568,
+        "roads": 1400,
+        "tiles": 32
+      },
+      "drawcalls": 36
+    },
+    {
+      "position": [
+        -481.25145283835,
+        1.7,
+        1964.408379999766
+      ],
+      "stats": {
+        "buildings": 513,
+        "roads": 1343,
+        "tiles": 30
+      },
+      "drawcalls": 36
+    },
+    {
+      "position": [
+        -945.1150945204065,
+        1.7,
+        -72.11309600033104
+      ],
+      "stats": {
+        "buildings": 386,
+        "roads": 939,
+        "tiles": 19
+      },
+      "drawcalls": 36
+    },
+    {
+      "position": [
+        -1099.8453875962055,
+        1.7,
+        1501.0054839994177
+      ],
+      "stats": {
+        "buildings": 492,
+        "roads": 1348,
+        "tiles": 33
+      },
+      "drawcalls": 36
+    }
+  ],
+  "errors": [],
+  "externalMapRequests": []
+}

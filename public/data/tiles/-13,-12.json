@@ -1,0 +1,1 @@
+{"buildings":[],"roads":[{"$ref":"roads-700820215"},{"$ref":"roads-776453289"},{"$ref":"roads-966589730"},{"id":1123255211,"path":[{"x":-3287.1,"z":-3244.11},{"x":-3474.02,"z":-3344.69}],"width":4.5,"highway":"service","name":"","oneway":false,"bridge":false}],"waters":[],"parks":[{"$ref":"parks-1011687980"}],"parking":[],"artworks":[]}

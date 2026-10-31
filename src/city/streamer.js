@@ -2,15 +2,16 @@ import * as THREE from "three";
 import { STREAM, SONGDO } from "../config.js";
 import { fetchOsmBbox } from "../geo/overpass.js";
 import { parseOsmCity } from "./parseOsm.js";
-import { createBuildingsGroup,createRoadsGroup,createParkGroup,createWaterGroup,disposeObject3D } from "./buildMeshes.js";
+import { createBuildingsGroup,createRoadsGroup,createParkGroup,createWaterGroup,createFlatPolygons,disposeObject3D } from "./buildMeshes.js";
 import { createFacadeMaterial,createWaterMaterial,createAsphaltMaterial,createGrassMaterial,updateMaterialTime } from "./materials.js";
 import { createParkDetails } from "../scene/parkDetails.js";
+import { createMappedDetails, createExplorationGround } from "./surfaces.js";
 import { installCanalReflection } from "../scene/water.js";
 
-const kinds=["buildings","roads","parks","waters"];
+const kinds=["buildings","roads","parks","waters","parking","artworks"];
 let snapshotPromise;
 function loadSnapshot() {
-  snapshotPromise ??= fetch(`${import.meta.env.BASE_URL}data/central-park.json`).then(r=>{
+  snapshotPromise ??= fetch(`${import.meta.env?.BASE_URL || "/"}data/central-park.json`).then(r=>{
     if(!r.ok) throw new Error("센트럴파크 기본 지도 파일을 불러오지 못했습니다");return r.json();
   }).catch(e=>{snapshotPromise=null;throw e;});
   return snapshotPromise;
@@ -26,6 +27,7 @@ export class CityStreamer {
     this.materials.forEach(m=>m.userData.shared=true);
     this.snapshotIds=new Set();this.featureOwners=new Map();this.disposed=false;
     this.abort=new AbortController();
+    this.featurePromises=new Map();this.offlineTiles=new Set();this.destinations=[];this.baseUrl=import.meta.env?.BASE_URL || "/";
   }
   setBaseColliders(colliders) {this.baseColliders=colliders || [];}
   worldToTile(x,z) {return {tx:Math.floor(x/STREAM.tileSizeM),tz:Math.floor(z/STREAM.tileSizeM)};}
@@ -47,13 +49,20 @@ export class CityStreamer {
     const group=new THREE.Group();
     const buildings=createBuildingsGroup(city.buildings,this.facadeMat);
     const water=createWaterGroup(city.waters,this.waterMat);
-    group.add(createParkGroup(city.parks,this.grassMat),water,createRoadsGroup(city.roads,this.asphaltMat),buildings.group);
+    group.add(createParkGroup(city.parks,this.grassMat),water,createRoadsGroup(city.roads,this.asphaltMat),buildings.group,createMappedDetails(city));
     return {group,water,colliders:buildings.colliders,counts:{buildings:city.buildings.length,roads:city.roads.length}};
   }
   async boot(x,z,{onProgress}={}) {
     onProgress?.(0.1,"센트럴파크 실제 수로·산책로 불러오는 중…");
-    const data=await loadSnapshot(); if(this.disposed)return;
+    const [data,manifest]=await Promise.all([
+      loadSnapshot(),
+      fetch(`${this.baseUrl}data/songdo-manifest.json`,{signal:this.abort.signal}).then(r=>{if(!r.ok)throw new Error("송도 전체 지도 목록을 읽지 못했습니다");return r.json();})
+    ]); if(this.disposed)return;
+    if(manifest.tileSizeM!==STREAM.tileSizeM)throw new Error("지도 타일 크기가 설정과 일치하지 않습니다");
+    this.offlineTiles=new Set(manifest.tiles);this.destinations=manifest.destinations;
     const city=parseOsmCity(data,this.projector.project);
+    for(const b of city.buildings)Object.assign(b,manifest.buildingOverrides?.[b.id] || {});
+    this.ground=createExplorationGround(this.projector);this.root.add(this.ground);
     for(const kind of kinds) city[kind].forEach(f=>this.snapshotIds.add(`${kind}:${f.id}`));
     this.coverage=data.bounds;this.baseCity=city;
     const built=this.#build(city);built.group.name="central-park-map";
@@ -62,7 +71,7 @@ export class CityStreamer {
     this.baseCounts=built.counts;this.snapshotGroup=built.group;this.root.add(built.group);
     this.reflection=installCanalReflection(built.water,this.sunDirection);
     this.#stats();onProgress?.(1,"송도 센트럴파크 수변 산책로 준비 완료");
-    this.onStatus?.("센트럴파크 기본 지도 · 주변 실시간 확장");
+    this.onStatus?.("송도 전체 기본 지도 · 구역별 자동 로딩");
     this.requestAround(x,z,{radius:STREAM.loadRadius});
   }
   requestAround(x,z,{radius=STREAM.loadRadius}={}) {
@@ -85,28 +94,51 @@ export class CityStreamer {
     if(this.disposed)return;
     this.queue=this.queue.filter(t=>this.tiles.get(t.key)===t);
     this.queue.sort((a,b)=>Math.hypot(a.tx-this.playerTile.tx,a.tz-this.playerTile.tz)-Math.hypot(b.tx-this.playerTile.tx,b.tz-this.playerTile.tz));
-    while(this.activeFetches<2&&this.queue.length) {
+    while(this.activeFetches<(this.offlineTiles.size?STREAM.maxConcurrentFetches:2)&&this.queue.length) {
       const job=this.queue.shift();job.state="loading";this.activeFetches++;
       this.#load(job).catch(e=>{
         if(this.disposed)return;
         job.state="error";job.retryAt=performance.now()+60000;
-        this.onStatus?.("외부 지도 연결 지연 · 센트럴파크 기본 지도 유지");
+        this.onStatus?.("지도 구역 로딩 지연 · 자동 재시도");
         console.info("Background map unavailable:",e.message);
       }).finally(()=>{this.activeFetches--;this.#pump();});
     }
   }
   async #load(job) {
-    const res=await fetchOsmBbox(this.tileBbox(job.tx,job.tz),{tileId:job.key,signal:this.abort.signal});
-    if(this.disposed || !this.tiles.has(job.key))return;
-    const city=parseOsmCity(res.data,this.projector.project);job.owned=[];
-    for(const kind of kinds) city[kind]=city[kind].filter(f=>{
+    let city;
+    if(this.offlineTiles.has(job.key)) {
+      const response=await fetch(`${this.baseUrl}data/tiles/${job.key}.json`,{signal:this.abort.signal});
+      if(!response.ok)throw new Error(`포함 지도 타일 오류 ${response.status}`);
+      city=await response.json();
+      await Promise.all(kinds.map(async kind=>{
+        city[kind]=await Promise.all((city[kind]||[]).map(async feature=>{
+          if(!feature.$ref)return feature;
+          const ref=feature.$ref;
+          if(!this.featurePromises.has(ref))this.featurePromises.set(ref,
+            fetch(`${this.baseUrl}data/features/${ref}.json`,{signal:this.abort.signal}).then(r=>{if(!r.ok)throw new Error(`지도 객체 오류 ${r.status}`);return r.json();}).catch(e=>{this.featurePromises.delete(ref);throw e;}));
+          return this.featurePromises.get(ref);
+        }));
+      }));
+    } else {
+      // The manifest covers the complete requested rectangle, including genuinely empty tiles.
+      const b=this.tileBbox(job.tx,job.tz),c=SONGDO.bbox;
+      if(b.north>=c.south&&b.south<=c.north&&b.east>=c.west&&b.west<=c.east) {
+        city=Object.fromEntries(kinds.map(k=>[k,[]]));
+      } else {
+        const res=await fetchOsmBbox(b,{tileId:job.key,signal:this.abort.signal});
+        city=parseOsmCity(res.data,this.projector.project);
+      }
+    }
+    if(this.disposed || this.tiles.get(job.key)!==job)return;
+    job.owned=[];
+    for(const kind of kinds) city[kind]=(city[kind]||[]).filter(f=>{
       const id=`${kind}:${f.id}`;
       if(this.snapshotIds.has(id)||this.featureOwners.has(id))return false;
       this.featureOwners.set(id,job.key);job.owned.push(id);return true;
     });
     Object.assign(job,this.#build(city));job.group.name=`tile-${job.key}`;job.state="ready";
     this.root.add(job.group);this.#stats();
-    this.onStatus?.(`센트럴파크 · 건물 ${this.stats.buildings} · 도로 ${this.stats.roads}`);
+    this.onStatus?.(`송도 · 건물 ${this.stats.buildings} · 도로 ${this.stats.roads}`);
   }
   #unload(key) {
     const tile=this.tiles.get(key);if(!tile)return;
@@ -136,6 +168,7 @@ export class CityStreamer {
     this.reflection?.dispose();
     for(const tile of this.tiles.values()) if(tile.group){this.root.remove(tile.group);disposeObject3D(tile.group);}
     if(this.snapshotGroup){this.root.remove(this.snapshotGroup);disposeObject3D(this.snapshotGroup);}
-    this.materials.forEach(m=>m.dispose());this.tiles.clear();this.featureOwners.clear();
+    if(this.ground){this.root.remove(this.ground);disposeObject3D(this.ground);}
+    this.featurePromises.clear();this.materials.forEach(m=>m.dispose());this.tiles.clear();this.featureOwners.clear();
   }
 }

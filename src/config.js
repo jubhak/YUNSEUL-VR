@@ -4,10 +4,10 @@ export const SONGDO = {
   center: { lat: 37.3929286, lon: 126.6386891 },
   // 송도 IBD·캠퍼스·해안까지 넓게
   bbox: {
-    south: 37.358,
-    west: 126.608,
-    north: 37.422,
-    east: 126.688,
+    south: 37.325,
+    west: 126.585,
+    north: 37.440,
+    east: 126.725,
   },
 };
 
@@ -50,6 +50,7 @@ export const MODES = {
 };
 
 export const LOOK = {
+  keyboardYawRate: 1.15,
   maxYawRate: 0.48,
   maxPitchRate: 0.32,
   pitchDown: Math.PI / 10, // 18° downward; never point straight at the ground
@@ -79,5 +80,5 @@ export const STREAM = {
   bootWaitMs: 18000, // 하드 상한 18초
 };
 
-export const CACHE_KEY_PREFIX = "yunseul-vr-tile-v4";
+export const CACHE_KEY_PREFIX = "yunseul-vr-tile-v5";
 export const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;

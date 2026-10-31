@@ -1,0 +1,1 @@
+{"buildings":[],"roads":[{"id":37401430,"path":[{"x":6503.44,"z":-2747.58},{"x":6427.96,"z":-2791.98},{"x":6306.23,"z":-2863.61},{"x":6180.61,"z":-2937.11}],"width":5,"highway":"unclassified","name":"남동대로410번길","oneway":false,"bridge":false},{"$ref":"roads-37402924"},{"$ref":"roads-236085352"},{"$ref":"roads-559023916"}],"waters":[],"parks":[],"parking":[],"artworks":[]}

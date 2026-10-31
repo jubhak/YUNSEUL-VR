@@ -1,0 +1,1 @@
+{"buildings":[],"roads":[{"id":468219786,"path":[{"x":6678.43,"z":1156.5},{"x":6369.43,"z":1106.83}],"width":9.9,"highway":"trunk","name":"제3경인고속화도로","oneway":true,"bridge":false},{"$ref":"roads-487634594"},{"$ref":"roads-551274848"}],"waters":[],"parks":[{"$ref":"parks-474786738"}],"parking":[],"artworks":[]}

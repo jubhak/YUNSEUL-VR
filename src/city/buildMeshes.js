@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { createSignatureBuilding } from "./signatures.js";
 import { mergeGeometries as mergeBuffers } from "three/addons/utils/BufferGeometryUtils.js";
 import {
   createFacadeMaterial,
@@ -133,7 +134,8 @@ export function createBuildingsGroup(buildings, sharedFacadeMat) {
         col[i * 3 + 2] = Math.min(1, color.b * shade);
       }
       geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
-      geometries.push(geo);
+      const signature = createSignatureBuilding(b);
+      if (signature) {geo.dispose();group.add(signature);} else geometries.push(geo);
 
       let minX = Infinity,
         maxX = -Infinity,
@@ -151,6 +153,8 @@ export function createBuildingsGroup(buildings, sharedFacadeMat) {
         minZ,
         maxZ,
         height: b.height,
+        footprint: b.footprint,
+        holes: b.holes || [],
         name: b.name,
       });
     } catch {
@@ -211,7 +215,7 @@ export function createRoadsGroup(roads, sharedAsphaltMat) {
     }
 
     // 차도 본체
-    const w = Math.max(road.width, 6.5);
+    const w = Math.max(road.width, 2.5);
     const roadMesh = ribbonMesh(road.path, w, 0.16);
     roadMesh.material = asphalt;
     roadMesh.receiveShadow = true;
@@ -390,7 +394,10 @@ export function createFlatPolygons(items, colorOrMat, y = 0.02) {
 export function createParkGroup(items, sharedGrassMat) {
   const grass = sharedGrassMat || createGrassMaterial();
   grass.userData.shared = true;
-  return createFlatPolygons(items, grass, 0.03);
+  const group = createFlatPolygons(items.filter(p=>p.tags?.golf!=="bunker"), grass, 0.03);
+  const bunkers = items.filter(p=>p.tags?.golf==="bunker");
+  if (bunkers.length) group.add(createFlatPolygons(bunkers, 0xd9ccb0, 0.04));
+  return group;
 }
 
 export function createWaterGroup(items, sharedWaterMat) {
