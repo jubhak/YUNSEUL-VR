@@ -1,118 +1,42 @@
 import * as THREE from "three";
 import { createGrassMaterial } from "../city/materials.js";
-import { createStreetTrees } from "./trees.js";
-
-function makeCloudTexture() {
-  const c = document.createElement("canvas");
-  c.width = 512;
-  c.height = 256;
-  const g = c.getContext("2d");
-  g.clearRect(0, 0, 512, 256);
-  const blob = (x, y, r, a) => {
-    const grd = g.createRadialGradient(x, y, 0, x, y, r);
-    grd.addColorStop(0, `rgba(255,255,255,${a})`);
-    grd.addColorStop(0.55, `rgba(255,255,255,${a * 0.45})`);
-    grd.addColorStop(1, "rgba(255,255,255,0)");
-    g.fillStyle = grd;
-    g.beginPath();
-    g.arc(x, y, r, 0, Math.PI * 2);
-    g.fill();
-  };
-  blob(180, 130, 90, 0.65);
-  blob(250, 120, 80, 0.55);
-  blob(310, 140, 70, 0.5);
-  blob(220, 150, 60, 0.45);
-  blob(280, 110, 55, 0.4);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
 
 export function createAtmosphere(scene) {
   const group = new THREE.Group();
   group.name = "atmosphere";
-
   const grassMat = createGrassMaterial();
   grassMat.userData.shared = true;
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(8000, 8000), grassMat);
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -0.04;
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(18000,18000),grassMat);
+  ground.rotation.x = -Math.PI/2;
+  ground.position.y = -0.22;
   ground.receiveShadow = true;
+  ground.renderOrder = -20;
   group.add(ground);
-
-  const cloudTex = makeCloudTexture();
-  const cloudMat = new THREE.MeshBasicMaterial({
-    map: cloudTex,
-    transparent: true,
-    depthWrite: false,
-    opacity: 0.9,
-    fog: true,
+  const cloudMat = new THREE.ShaderMaterial({
+    transparent:true,depthWrite:false,side:THREE.DoubleSide,
+    uniforms:{time:{value:0}},
+    vertexShader:`varying vec3 vWorld; void main(){
+      vec4 w = modelMatrix * vec4(position,1.0); vWorld=w.xyz;
+      gl_Position=projectionMatrix*viewMatrix*w;
+    }`,
+    fragmentShader:`varying vec3 vWorld; uniform float time;
+      float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+      float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);
+        return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
+      float fbm(vec2 p){float v=0.0,a=0.5;for(int i=0;i<5;i++){v+=a*noise(p);p=p*2.03+7.3;a*=0.5;}return v;}
+      void main(){
+        vec2 p=vWorld.xz*0.00065+vec2(time*0.001,0.0);
+        float n=fbm(p),edge=smoothstep(0.48,0.7,n);
+        float fade=1.0-smoothstep(2500.0,8000.0,length(vWorld.xz-cameraPosition.xz));
+        vec3 c=mix(vec3(0.73,0.79,0.83),vec3(1.0),smoothstep(0.5,0.8,n));
+        gl_FragColor=vec4(c,edge*fade*0.77);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
   });
-  const clouds = [];
-  for (let i = 0; i < 48; i++) {
-    const w = 200 + Math.random() * 320;
-    const mesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(w, w * 0.42),
-      cloudMat,
-    );
-    const ang = Math.random() * Math.PI * 2;
-    const dist = 400 + Math.random() * 2000;
-    mesh.position.set(
-      Math.cos(ang) * dist,
-      180 + Math.random() * 220,
-      Math.sin(ang) * dist,
-    );
-    mesh.userData.drift = 1.5 + Math.random() * 5;
-    mesh.userData.baseX = mesh.position.x;
-    group.add(mesh);
-    clouds.push(mesh);
-  }
-
-  group.add(createStreetTrees({ x: 0, z: 0 }, 80, 108));
-
-  // 가로등
-  const poleMat = new THREE.MeshStandardMaterial({
-    color: 0x3a4450,
-    metalness: 0.55,
-    roughness: 0.35,
-  });
-  const bulbMat = new THREE.MeshStandardMaterial({
-    color: 0xfff6d8,
-    emissive: 0xffe0a0,
-    emissiveIntensity: 1.4,
-  });
-  for (let i = 0; i < 24; i++) {
-    const a = (i / 24) * Math.PI * 2;
-    const x = Math.cos(a) * 122;
-    const z = Math.sin(a) * 122;
-    const pole = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.08, 0.12, 6.2, 8),
-      poleMat,
-    );
-    pole.position.set(x, 3.1, z);
-    group.add(pole);
-    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 10), bulbMat);
-    bulb.position.set(x + Math.cos(a) * 0.9, 6.0, z + Math.sin(a) * 0.9);
-    group.add(bulb);
-    const light = new THREE.PointLight(0xffe6b0, 0.9, 26, 2);
-    light.position.copy(bulb.position);
-    group.add(light);
-  }
-
+  const clouds = new THREE.Mesh(new THREE.PlaneGeometry(20000,20000),cloudMat);
+  clouds.rotation.x=-Math.PI/2; clouds.position.y=1150;
+  group.add(clouds);
   scene.add(group);
-
-  return {
-    group,
-    grassMat,
-    update(dt, time, playerPos) {
-      if (grassMat.uniforms?.time) grassMat.uniforms.time.value = time;
-      for (const c of clouds) {
-        c.position.x += c.userData.drift * dt;
-        if (c.position.x > c.userData.baseX + 1000) {
-          c.position.x = c.userData.baseX - 1000;
-        }
-        if (playerPos) c.lookAt(playerPos.x, c.position.y, playerPos.z);
-      }
-    },
-  };
+  return {group,grassMat,update(dt,time) {cloudMat.uniforms.time.value=time;}};
 }

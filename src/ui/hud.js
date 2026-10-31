@@ -5,7 +5,7 @@ export function createHud() {
     <div id="top-bar">
       <div id="brand" class="panel">
         <h1>YUNSEUL VR · 송도</h1>
-        <p>스트리밍 로드 · 현실감 시티</p>
+        <p>CENTRAL PARK · 수변 산책</p>
       </div>
       <div id="status" class="panel">
         <div class="row"><span class="label">모드</span><span data-field="mode">걷기</span></div>
@@ -18,6 +18,7 @@ export function createHud() {
     </div>
 
     <div id="crosshair"></div>
+    <div id="map-attribution">지도 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a> · ODbL</div>
 
     <div id="mode-bar" class="panel">
       <button class="mode-btn active" data-mode="walk" type="button">걷기 (1)</button>
@@ -28,7 +29,7 @@ export function createHud() {
 
     <div id="help" class="panel">
       <strong>조작</strong><br/>
-      WASD — 이동 · 마우스 — 시점(속도 제한)<br/>
+      WASD — 이동 · 마우스 — 시점 · 아래 보기 최대 18°<br/>
       휠 — 확대/축소<br/>
       Shift 가속 · Space 점프(걷기)<br/>
       1 / 2 / 3 모드 · ESC 잠금 해제
@@ -39,18 +40,19 @@ export function createHud() {
   overlay.id = "overlay";
   overlay.innerHTML = `
     <div class="card">
-      <h1>송도 시티 VR</h1>
+      <div class="eyebrow">YUNSEUL / SONGDO</div>
+      <h1>센트럴파크,<br/>물빛을 따라 걷다.</h1>
       <p class="subtitle">
-        GTA처럼 현재 위치만 빠르게 불러 입장하고, 이동하면서 캐릭터 주변 도시를
-        계속 스트리밍합니다. (시작 로딩 ≤ 20초)
+        송도 센트럴파크 수변 산책로에서 시작합니다.
+        실제 지도 위에 햇살, 물결, 나무 그늘을 더했습니다.
       </p>
       <ul>
-        <li>빠른 시작 + 이동 중 주변 프리로드</li>
-        <li>통유리·상가·차도 · 송도 전역 이동</li>
-        <li>센트럴파크 수로·시그니처 타워</li>
+        <li>실제 수로와 산책로 · 기본 지도 포함</li>
+        <li>수면 반사 · 유리 파사드 · 자연광과 그림자</li>
+        <li>안정적인 시선 · 하향 각도 제한</li>
       </ul>
       <div class="actions">
-        <button class="action-btn primary" data-action="start" type="button">바로 시작</button>
+        <button class="action-btn primary" data-action="start" type="button">센트럴파크 입장</button>
         <button class="action-btn secondary" data-action="refresh" type="button">캐시 비우고 다시</button>
       </div>
       <div id="loading-bar"><span></span></div>
@@ -87,6 +89,9 @@ export function createHud() {
         });
       root.querySelectorAll("[data-action], [data-mode]").forEach(bind);
       overlay.querySelectorAll("[data-action]").forEach(bind);
+    },
+    setBusy(busy) {
+      overlay.querySelectorAll("button").forEach(b => b.disabled = busy);
     },
     setProgress(pct, text) {
       loadingBar.style.width = `${Math.max(0, Math.min(100, pct))}%`;

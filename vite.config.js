@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 
 export default defineConfig({
+  base: "./",
   server: {
     proxy: {
       // CORS / User-Agent 이슈 시 브라우저 → 로컬 프록시 → Overpass

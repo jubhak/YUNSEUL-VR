@@ -1,139 +1,73 @@
 import * as THREE from "three";
+import { Sky } from "three/addons/objects/Sky.js";
 import { VRButton } from "three/addons/webxr/VRButton.js";
 import { LOOK } from "../config.js";
 import { createAtmosphere } from "./atmosphere.js";
 
 export function createScene(container) {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x7eb8e4);
-  scene.fog = new THREE.FogExp2(0xb9d9ee, 0.00034);
-
-  const camera = new THREE.PerspectiveCamera(
-    LOOK.fovDefault,
-    window.innerWidth / window.innerHeight,
-    0.12,
-    6000,
-  );
-
-  const renderer = new THREE.WebGLRenderer({
-    antialias: true,
-    powerPreference: "high-performance",
-  });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  scene.background = new THREE.Color(0xc3d4de);
+  scene.fog = new THREE.FogExp2(0xc3d4de, 0.00017);
+  const camera = new THREE.PerspectiveCamera(LOOK.fovDefault,innerWidth/innerHeight,0.25,8000);
+  const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:"high-performance" });
+  renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));
+  renderer.setSize(innerWidth,innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.08;
+  renderer.toneMappingExposure = 0.72;
   renderer.xr.enabled = true;
   container.appendChild(renderer.domElement);
-
   const vrButton = VRButton.createButton(renderer);
-  vrButton.style.position = "fixed";
-  vrButton.style.bottom = "88px";
-  vrButton.style.left = "16px";
-  vrButton.style.zIndex = "15";
+  Object.assign(vrButton.style,{position:"fixed",bottom:"74px",left:"20px",zIndex:"15"});
   document.body.appendChild(vrButton);
+  if (!navigator.xr) vrButton.style.display="none";
+  else navigator.xr.isSessionSupported("immersive-vr").then(supported => {
+    if (!supported) vrButton.style.display="none";
+  }).catch(() => { vrButton.style.display="none"; });
 
-  const hemi = new THREE.HemisphereLight(0xeef7ff, 0x6a8a5a, 0.85);
-  scene.add(hemi);
-
-  const sun = new THREE.DirectionalLight(0xfff3df, 1.7);
-  sun.position.set(280, 420, 160);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.camera.near = 20;
-  sun.shadow.camera.far = 1200;
-  sun.shadow.camera.left = -500;
-  sun.shadow.camera.right = 500;
-  sun.shadow.camera.top = 500;
-  sun.shadow.camera.bottom = -500;
-  sun.shadow.bias = -0.00025;
-  scene.add(sun);
-  scene.add(sun.target);
-
-  const fill = new THREE.DirectionalLight(0xa8c8e8, 0.35);
-  fill.position.set(-160, 90, -120);
-  scene.add(fill);
-
-  const skyGeo = new THREE.SphereGeometry(2800, 48, 24);
-  const skyMat = new THREE.ShaderMaterial({
-    side: THREE.BackSide,
-    depthWrite: false,
-    uniforms: {
-      topColor: { value: new THREE.Color(0x2f74b8) },
-      midColor: { value: new THREE.Color(0x7ebfe8) },
-      bottomColor: { value: new THREE.Color(0xe4f3fb) },
-      offset: { value: 12 },
-      exponent: { value: 0.7 },
-      time: { value: 0 },
-    },
-    vertexShader: `
-      varying vec3 vWorldPosition;
-      void main() {
-        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-        vWorldPosition = worldPosition.xyz;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform vec3 topColor;
-      uniform vec3 midColor;
-      uniform vec3 bottomColor;
-      uniform float offset;
-      uniform float exponent;
-      uniform float time;
-      varying vec3 vWorldPosition;
-
-      float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
-      float noise(vec2 p){
-        vec2 i = floor(p); vec2 f = fract(p);
-        float a=hash(i), b=hash(i+vec2(1.,0.)), c=hash(i+vec2(0.,1.)), d=hash(i+vec2(1.,1.));
-        vec2 u=f*f*(3.-2.*f);
-        return mix(a,b,u.x)+(c-a)*u.y*(1.-u.x)+(d-b)*u.x*u.y;
-      }
-
-      void main() {
-        vec3 dir = normalize(vWorldPosition);
-        float h = dir.y;
-        float t = max(pow(max(h + 0.02, 0.0), exponent), 0.0);
-        vec3 col = mix(bottomColor, midColor, smoothstep(0.0, 0.4, t));
-        col = mix(col, topColor, smoothstep(0.3, 1.0, t));
-
-        // soft procedural cloud layer in sky dome
-        if (h > 0.05) {
-          vec2 uv = dir.xz / max(h, 0.08);
-          float c = noise(uv * 0.55 + time * 0.01);
-          c = smoothstep(0.55, 0.78, c) * smoothstep(0.05, 0.35, h);
-          col = mix(col, vec3(1.0, 1.0, 1.0), c * 0.45);
-        }
-
-        float sun = pow(max(dot(dir, normalize(vec3(0.4, 0.55, 0.2))), 0.0), 40.0);
-        col += vec3(1.0, 0.93, 0.75) * sun * 0.55;
-        gl_FragColor = vec4(col, 1.0);
-      }
-    `,
-  });
-  const sky = new THREE.Mesh(skyGeo, skyMat);
+  const sky = new Sky();
+  sky.scale.setScalar(6500);
+  sky.renderOrder=-1000;
+  const uniforms = sky.material.uniforms;
+  uniforms.turbidity.value = 3.2;
+  uniforms.rayleigh.value = 2.1;
+  uniforms.mieCoefficient.value = 0.004;
+  uniforms.mieDirectionalG.value = 0.82;
+  const sunDirection = new THREE.Vector3(0.52,0.72,0.46).normalize();
+  uniforms.sunPosition.value.copy(sunDirection);
   scene.add(sky);
+  // PMREM gives glass and water a filtered, physically lit sky to reflect.
+  const envScene = new THREE.Scene();
+  const envSky = sky.clone();
+  envScene.add(envSky);
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const environment = pmrem.fromScene(envScene,0.04,0.1,8000);
+  scene.environment = environment.texture;
+  scene.environmentIntensity = 0.12;
+  pmrem.dispose();
+
+  const hemi = new THREE.HemisphereLight(0xc6dbed,0x797664,0.4);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xfff2db,2.6);
+  sun.position.copy(sunDirection).multiplyScalar(650);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048,2048);
+  Object.assign(sun.shadow.camera,{near:1,far:1500,left:-165,right:165,top:165,bottom:-165});
+  sun.shadow.bias = -0.00008;
+  sun.shadow.normalBias = 0.035;
+  sun.shadow.radius = 2;
+  scene.add(sun,sun.target);
 
   const atmosphere = createAtmosphere(scene);
-
-  function onResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
+  function resize() {
+    camera.aspect = innerWidth/innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(innerWidth,innerHeight);
   }
-  window.addEventListener("resize", onResize);
-
-  return {
-    scene,
-    camera,
-    renderer,
-    sun,
-    skyMat,
-    atmosphere,
-    dispose: () => window.removeEventListener("resize", onResize),
+  window.addEventListener("resize",resize);
+  return {scene,camera,renderer,sun,sunDirection,skyMat:sky.material,atmosphere,
+    dispose() { window.removeEventListener("resize",resize); environment.dispose(); },
   };
 }

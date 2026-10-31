@@ -1,228 +1,100 @@
-function ringArea(ring) {
-  let sum = 0;
-  for (let i = 0; i < ring.length; i++) {
-    const a = ring[i];
-    const b = ring[(i + 1) % ring.length];
-    sum += a.x * b.z - b.x * a.z;
+// OSM ways may be open fragments of multipolygon rings. Join by node id before triangulation.
+function stitch(parts) {
+  const pending = parts.filter(p => p?.length >= 2).map(p => [...p]);
+  const rings = [];
+  while (pending.length) {
+    const ring = pending.shift();
+    let changed = true;
+    while (changed && ring[0] !== ring.at(-1)) {
+      changed = false;
+      for (let i = 0; i < pending.length; i++) {
+        const p = pending[i];
+        if (ring.at(-1) === p[0]) ring.push(...p.slice(1));
+        else if (ring.at(-1) === p.at(-1)) ring.push(...p.slice(0,-1).reverse());
+        else if (ring[0] === p.at(-1)) ring.unshift(...p.slice(0,-1));
+        else if (ring[0] === p[0]) ring.unshift(...p.slice(1).reverse());
+        else continue;
+        pending.splice(i,1); changed = true; break;
+      }
+    }
+    if (ring.length >= 4 && ring[0] === ring.at(-1)) rings.push(ring);
   }
-  return sum / 2;
+  return rings;
 }
-
-function ensureCCW(ring) {
-  return ringArea(ring) > 0 ? ring : ring.slice().reverse();
+export function pointInRing(p, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length-1; i < ring.length; j = i++) {
+    const a = ring[i], b = ring[j];
+    if ((a.z > p.z) !== (b.z > p.z) && p.x < (b.x-a.x)*(p.z-a.z)/(b.z-a.z)+a.x) inside = !inside;
+  }
+  return inside;
 }
-
-function parseHeight(tags = {}) {
-  const raw =
-    tags.height ||
-    tags["building:height"] ||
-    tags["roof:height"];
-  if (raw) {
-    const n = parseFloat(String(raw).replace(/m$/i, "").trim());
-    if (Number.isFinite(n) && n > 0) return Math.min(n, 350);
-  }
-  const levels = parseFloat(tags["building:levels"] || tags.levels || "");
-  if (Number.isFinite(levels) && levels > 0) {
-    return Math.min(levels * 3.2, 350);
-  }
-  const minLevels = parseFloat(tags["building:min_level"] || "");
-  if (Number.isFinite(minLevels) && minLevels > 0) {
-    return Math.min(minLevels * 3.2 + 3.2, 350);
-  }
+export function pointInPolygon(p, polygon) {
+  return pointInRing(p, polygon.footprint) && !(polygon.holes || []).some(h => pointInRing(p,h));
+}
+function stableRandom(id) {
+  const n = Math.sin(Number(String(id).replace(/\D/g,"")) * 12.9898) * 43758.5453;
+  return n - Math.floor(n);
+}
+function height(tags, id) {
+  const explicit = parseFloat(tags.height || tags["building:height"]);
+  if (explicit > 0) return Math.min(explicit, 350);
+  const levels = parseFloat(tags["building:levels"]);
+  if (levels > 0) return Math.min(levels * 3.2, 350);
   const kind = tags.building;
-  if (kind === "apartments" || kind === "residential") return 40 + Math.random() * 28;
-  if (kind === "commercial" || kind === "office" || kind === "yes") {
-    return 22 + Math.random() * 48;
-  }
-  if (kind === "retail" || kind === "shop" || kind === "supermarket") {
-    return 9 + Math.random() * 8;
-  }
-  if (kind === "hotel") return 50 + Math.random() * 40;
+  const r = stableRandom(id);
+  if (kind === "apartments" || kind === "residential") return 48+r*45;
+  if (kind === "office" || kind === "hotel") return 35+r*45;
   if (kind === "garage" || kind === "shed" || kind === "roof") return 3.5;
-  return 14 + Math.random() * 18;
+  return 9+r*15;
 }
-
-function buildingStyleFromTags(tags = {}) {
-  const kind = tags.building;
-  if (
-    kind === "retail" ||
-    kind === "shop" ||
-    kind === "supermarket" ||
-    kind === "commercial" ||
-    kind === "mall" ||
-    kind === "kiosk" ||
-    tags.shop ||
-    tags.amenity === "marketplace" ||
-    tags.amenity === "restaurant" ||
-    tags.amenity === "cafe"
-  ) {
-    return "retail";
-  }
-  if (kind === "office" || kind === "apartments" || kind === "hotel" || kind === "yes") {
-    return "glass";
-  }
-  return "mixed";
+function roadWidth(t) {
+  const explicit = parseFloat(t.width); if (explicit > 0) return Math.min(explicit, 45);
+  const lanes = parseFloat(t.lanes); if (lanes > 0) return Math.min(lanes*3.3,40);
+  return ({motorway:16,trunk:16,primary:14,secondary:11,tertiary:9,residential:7,service:4.5,cycleway:2.5,footway:2.5,path:2.2,pedestrian:4,steps:2})[t.highway] || 5;
 }
-
-function roadWidth(tags = {}) {
-  const hw = tags.highway;
-  if (tags.width) {
-    const w = parseFloat(tags.width);
-    if (Number.isFinite(w)) return Math.max(2, Math.min(w, 40));
-  }
-  const lanes = parseFloat(tags.lanes || "");
-  if (Number.isFinite(lanes) && lanes > 0) return Math.min(lanes * 3.5, 36);
-  switch (hw) {
-    case "motorway":
-    case "trunk":
-      return 16;
-    case "primary":
-      return 14;
-    case "secondary":
-      return 12;
-    case "tertiary":
-      return 10;
-    case "residential":
-    case "unclassified":
-    case "living_street":
-      return 8.5;
-    case "service":
-      return 5.5;
-    case "cycleway":
-      return 2.5;
-    case "footway":
-    case "path":
-    case "pedestrian":
-      return 2.2;
-    default:
-      return 5.5;
-  }
+function category(t) {
+  if (t.building || t["building:part"]) return "buildings";
+  if (t.natural === "water" || t.water || t.waterway === "riverbank") return "waters";
+  if (t.leisure === "park" || t.leisure === "garden" || ["grass","forest","meadow"].includes(t.landuse) || ["wood","grassland"].includes(t.natural)) return "parks";
+  return null;
 }
-
-function collectWays(elements) {
-  const nodes = new Map();
-  const ways = new Map();
-  const relations = [];
-
-  for (const el of elements) {
-    if (el.type === "node") nodes.set(el.id, el);
-    else if (el.type === "way") ways.set(el.id, el);
-    else if (el.type === "relation") relations.push(el);
+export function parseOsmCity(data, project) {
+  const elements = data.elements || [];
+  const nodes = new Map(elements.filter(e => e.type === "node").map(e => [e.id,e]));
+  const ways = new Map(elements.filter(e => e.type === "way").map(e => [e.id,e]));
+  const city = {buildings:[],roads:[],waters:[],parks:[]};
+  const consumed = new Set();
+  const coords = ids => ids.map(id => nodes.get(id)).filter(Boolean).map(n => project(n.lon,n.lat));
+  function add(kind,id,t,footprint,holes=[]) {
+    if (footprint.length < 3) return;
+    const item = {id,footprint,holes,name:t["name:ko"] || t.name || ""};
+    if (kind === "buildings") Object.assign(item, {
+      height:height(t,id), type:t.building || "yes",
+      style:(t.building === "office" || t.building === "hotel") ? "glass" : "mixed",
+    });
+    city[kind].push(item);
   }
-
-  function wayCoords(way, project) {
-    if (!way?.nodes) return null;
-    const pts = [];
-    for (const id of way.nodes) {
-      const n = nodes.get(id);
-      if (!n) continue;
-      const p = project(n.lon, n.lat);
-      pts.push({ x: p.x, z: p.z, lon: n.lon, lat: n.lat });
-    }
-    return pts.length >= 2 ? pts : null;
+  for (const rel of elements.filter(e => e.type === "relation")) {
+    const t = rel.tags || {}, kind = category(t); if (!kind) continue;
+    const members = (rel.members || []).filter(m => m.type === "way" && ways.has(m.ref));
+    const outers = stitch(members.filter(m => m.role !== "inner").map(m => ways.get(m.ref).nodes));
+    const inners = stitch(members.filter(m => m.role === "inner").map(m => ways.get(m.ref).nodes)).map(coords);
+    outers.forEach((ring,i) => {
+      const outer = coords(ring);
+      add(kind,`rel-${rel.id}-${i}`,t,outer,inners.filter(h => h.length && pointInRing(h[0],outer)));
+    });
+    if (outers.length) members.forEach(m => consumed.add(`${kind}:${m.ref}`));
   }
-
-  return { nodes, ways, relations, wayCoords };
-}
-
-export function parseOsmCity(osmData, project) {
-  const { ways, relations, wayCoords } = collectWays(osmData.elements || []);
-
-  const buildings = [];
-  const roads = [];
-  const waters = [];
-  const parks = [];
-
-  for (const way of ways.values()) {
-    const tags = way.tags || {};
-    const coords = wayCoords(way, project);
-    if (!coords) continue;
-
-    if (tags.building || tags.shop) {
-      if (coords.length < 3) continue;
-      const ring = ensureCCW(coords);
-      const type = tags.building || (tags.shop ? "retail" : "yes");
-      buildings.push({
-        id: way.id,
-        footprint: ring,
-        height: parseHeight({ ...tags, building: type }),
-        name: tags.name || tags["name:ko"] || "",
-        type,
-        style: buildingStyleFromTags({ ...tags, building: type }),
-      });
+  for (const w of ways.values()) {
+    const t = w.tags || {}, path = coords(w.nodes || []);
+    if (path.length < 2) continue;
+    if (t.highway && !["construction","proposed","platform"].includes(t.highway)) {
+      city.roads.push({id:w.id,path,width:roadWidth(t),highway:t.highway,name:t.name || "",oneway:t.oneway === "yes",bridge:!!t.bridge && t.bridge !== "no"});
       continue;
     }
-
-    if (tags.highway) {
-      roads.push({
-        id: way.id,
-        path: coords,
-        width: roadWidth(tags),
-        highway: tags.highway,
-        name: tags.name || tags["name:ko"] || "",
-      });
-      continue;
-    }
-
-    if (tags.natural === "water" || tags.water || tags.waterway === "riverbank") {
-      if (coords.length >= 3) {
-        waters.push({ id: way.id, footprint: ensureCCW(coords) });
-      }
-      continue;
-    }
-
-    if (tags.leisure === "park") {
-      if (coords.length >= 3) {
-        parks.push({ id: way.id, footprint: ensureCCW(coords) });
-      }
-      continue;
-    }
-
-    if (
-      (tags.landuse === "retail" || tags.landuse === "commercial") &&
-      coords.length >= 3
-    ) {
-      buildings.push({
-        id: way.id,
-        footprint: ensureCCW(coords),
-        height: 10 + Math.random() * 8,
-        name: tags.name || tags["name:ko"] || "",
-        type: "retail",
-        style: "retail",
-      });
-    }
+    const kind = category(t);
+    if (kind && !consumed.has(`${kind}:${w.id}`) && w.nodes?.[0] === w.nodes?.at(-1)) add(kind,w.id,t,path);
   }
-
-  // Multipolygon buildings / water / parks from relations
-  for (const rel of relations) {
-    const tags = rel.tags || {};
-    const outers = [];
-    for (const member of rel.members || []) {
-      if (member.type !== "way" || member.role !== "outer") continue;
-      const way = ways.get(member.ref);
-      const coords = wayCoords(way, project);
-      if (coords?.length >= 3) outers.push(ensureCCW(coords));
-    }
-    if (!outers.length) continue;
-
-    if (tags.building || tags.shop) {
-      const type = tags.building || "retail";
-      for (const ring of outers) {
-        buildings.push({
-          id: `rel-${rel.id}`,
-          footprint: ring,
-          height: parseHeight({ ...tags, building: type }),
-          name: tags.name || tags["name:ko"] || "",
-          type,
-          style: buildingStyleFromTags({ ...tags, building: type }),
-        });
-      }
-    } else if (tags.natural === "water" || tags.water) {
-      for (const ring of outers) waters.push({ id: `rel-${rel.id}`, footprint: ring });
-    } else if (tags.leisure === "park") {
-      for (const ring of outers) parks.push({ id: `rel-${rel.id}`, footprint: ring });
-    }
-  }
-
-  return { buildings, roads, waters, parks };
+  return city;
 }

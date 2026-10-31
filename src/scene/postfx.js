@@ -10,9 +10,9 @@ export function createPostFx(renderer, scene, camera) {
 
   const bloom = new UnrealBloomPass(
     new THREE.Vector2(window.innerWidth, window.innerHeight),
-    0.28, // strength
+    0.025, // strength
     0.55, // radius
-    0.82, // threshold
+    4.0, // threshold
   );
   composer.addPass(bloom);
   composer.addPass(new OutputPass());

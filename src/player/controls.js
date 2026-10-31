@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { MODES, LOOK } from "../config.js";
+import { clampPitch } from "./look.js";
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -48,9 +49,12 @@ export class PlayerController {
       // 잠금 순간 잔여 입력 폐기
       this._yawVel = 0;
       this._pitchVel = 0;
+      if (!this.locked) this.keys.clear();
       this.onLockChange?.(this.locked);
     };
 
+    this._onBlur = () => { this.keys.clear(); this._yawVel = this._pitchVel = 0; };
+    window.addEventListener("blur", this._onBlur);
     window.addEventListener("keydown", this._onKeyDown);
     window.addEventListener("keyup", this._onKeyUp);
     document.addEventListener("pointerlockchange", this._onPointerLockChange);
@@ -71,7 +75,8 @@ export class PlayerController {
   }
 
   requestLock() {
-    this.domElement.requestPointerLock?.();
+    const result = this.domElement.requestPointerLock?.();
+    result?.catch?.(() => this.onLockChange?.(false));
   }
 
   exitLock() {
@@ -94,6 +99,7 @@ export class PlayerController {
       LOOK.fovMin,
       LOOK.fovMax,
     );
+    this.pitch = clampPitch(this.pitch, this.camera.fov);
     this.camera.updateProjectionMatrix();
   }
 
@@ -155,11 +161,7 @@ export class PlayerController {
     this._pitchVel = 0;
 
     this.yaw += yawRate * dt;
-    this.pitch = clamp(
-      this.pitch + pitchRate * dt,
-      -LOOK.pitchLimit,
-      LOOK.pitchLimit,
-    );
+    this.pitch = clampPitch(this.pitch + pitchRate * dt, this.camera.fov);
   }
 
   update(dt) {
@@ -238,6 +240,7 @@ export class PlayerController {
   }
 
   dispose() {
+    window.removeEventListener("blur", this._onBlur);
     window.removeEventListener("keydown", this._onKeyDown);
     window.removeEventListener("keyup", this._onKeyUp);
     document.removeEventListener("pointerlockchange", this._onPointerLockChange);

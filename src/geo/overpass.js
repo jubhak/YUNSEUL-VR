@@ -1,7 +1,7 @@
 import { CACHE_KEY_PREFIX, CACHE_TTL_MS } from "../config.js";
 
 const OVERPASS_ENDPOINTS = [
-  "/api/overpass",
+  ...(import.meta.env.DEV ? ["/api/overpass"] : []),
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
   "https://overpass.nchc.org.tw/api/interpreter",
@@ -10,7 +10,7 @@ const OVERPASS_ENDPOINTS = [
 function buildQuery(bbox) {
   const { south, west, north, east } = bbox;
   return `
-[out:json][timeout:45];
+[out:json][timeout:20];
 (
   way["building"](${south},${west},${north},${east});
   relation["building"](${south},${west},${north},${east});
@@ -22,6 +22,8 @@ function buildQuery(bbox) {
   way["waterway"="riverbank"](${south},${west},${north},${east});
   way["leisure"="park"](${south},${west},${north},${east});
   relation["leisure"="park"](${south},${west},${north},${east});
+  way["natural"="wood"](${south},${west},${north},${east});
+  way["leisure"="garden"](${south},${west},${north},${east});
   way["landuse"="grass"](${south},${west},${north},${east});
   way["landuse"="retail"](${south},${west},${north},${east});
   way["landuse"="commercial"](${south},${west},${north},${east});
@@ -71,8 +73,10 @@ function writeCache(tileId, data) {
   }
 }
 
-async function fetchFromEndpoint(endpoint, query) {
+async function fetchFromEndpoint(endpoint, query, parentSignal) {
+  const signal = parentSignal ? AbortSignal.any([parentSignal, AbortSignal.timeout(12000)]) : AbortSignal.timeout(12000);
   const res = await fetch(endpoint, {
+    signal,
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
@@ -83,7 +87,7 @@ async function fetchFromEndpoint(endpoint, query) {
   return res.json();
 }
 
-export async function fetchOsmBbox(bbox, { tileId, forceRefresh = false } = {}) {
+export async function fetchOsmBbox(bbox, { tileId, forceRefresh = false, signal } = {}) {
   if (tileId && !forceRefresh) {
     const cached = readCache(tileId);
     if (cached) return { data: cached, fromCache: true };
@@ -94,11 +98,13 @@ export async function fetchOsmBbox(bbox, { tileId, forceRefresh = false } = {}) 
 
   for (const endpoint of OVERPASS_ENDPOINTS) {
     try {
-      const data = await fetchFromEndpoint(endpoint, query);
+      signal?.throwIfAborted();
+      const data = await fetchFromEndpoint(endpoint, query, signal);
       if (!data?.elements) throw new Error("빈 응답");
       if (tileId) writeCache(tileId, data);
       return { data, fromCache: false };
     } catch (err) {
+      if (signal?.aborted) throw err;
       lastError = err;
     }
   }

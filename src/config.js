@@ -1,7 +1,7 @@
 /** 인천 송도국제도시 전역 */
 export const SONGDO = {
   name: "인천 송도",
-  center: { lat: 37.3925, lon: 126.6435 },
+  center: { lat: 37.3929286, lon: 126.6386891 },
   // 송도 IBD·캠퍼스·해안까지 넓게
   bbox: {
     south: 37.358,
@@ -9,6 +9,14 @@ export const SONGDO = {
     north: 37.422,
     east: 126.688,
   },
+};
+
+/** Verified OSM footway node, on the north bank of Central Park's canal. */
+export const SPAWN = {
+  lat: 37.3929286,
+  lon: 126.6386891,
+  // Look southwest across the actual canal, not at the pavement.
+  lookAt: { lat: 37.39228, lon: 126.63745 },
 };
 
 export const MODES = {
@@ -44,7 +52,10 @@ export const MODES = {
 export const LOOK = {
   maxYawRate: 0.48,
   maxPitchRate: 0.32,
-  pitchLimit: 0.55,
+  pitchDown: Math.PI / 10, // 18° downward; never point straight at the ground
+  pitchUp: Math.PI * 0.36, // 64.8° upward for the skyline
+  horizonMargin: Math.PI / 90, // keep horizon visible even at maximum zoom
+
   yawGain: 0.00008,
   pitchGain: 0.00005,
   fovDefault: 65,
@@ -68,5 +79,5 @@ export const STREAM = {
   bootWaitMs: 18000, // 하드 상한 18초
 };
 
-export const CACHE_KEY_PREFIX = "yunseul-vr-tile-v3";
+export const CACHE_KEY_PREFIX = "yunseul-vr-tile-v4";
 export const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;

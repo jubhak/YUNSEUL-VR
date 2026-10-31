@@ -59,7 +59,7 @@ canvas {
   right: 16px;
   display: flex;
   gap: 12px;
-  align-items: stretch;
+  align-items: flex-start;
   justify-content: space-between;
   flex-wrap: wrap;
 }
@@ -312,3 +312,24 @@ canvas {
     font-size: 0.8rem;
   }
 }
+
+/* Quiet, editorial overlays keep the landscape as the focal point. */
+:root { --panel:rgba(20,31,32,.69); --line:rgba(229,235,224,.17); --text:#f0f2e9; --muted:#b5c2bd; --accent:#c1d3a3; }
+#brand { min-width:260px; }
+#brand h1 { letter-spacing:.12em; font-size:.86rem; }
+#brand p { letter-spacing:.06em; font-size:.7rem; margin-top:8px; }
+#status { background:rgba(20,31,32,.48)!important; font-variant-numeric:tabular-nums; }
+#overlay { background:radial-gradient(ellipse at 72% 24%,rgba(155,189,163,.2),transparent 55%),linear-gradient(140deg,#152a2e,#233b3b 55%,#111e24); }
+#overlay .card { padding:42px; width:min(560px,calc(100vw - 32px)); border-radius:20px; background:rgba(13,27,29,.86); }
+#overlay .eyebrow { color:#a9bfab; font-size:.7rem; letter-spacing:.24em; margin-bottom:24px; }
+#overlay h1 { font-size:clamp(1.9rem,5vw,2.6rem); font-weight:500; line-height:1.4; letter-spacing:-.04em; margin-bottom:20px; }
+#overlay .subtitle { font-size:.92rem; line-height:1.8; }
+#overlay li::before { content:"— "; }
+#overlay .primary { background:#c1d3a3; color:#1b2c29; padding:13px 20px; }
+button:disabled { opacity:.55; cursor:wait; }
+#map-attribution { position:absolute; left:20px; bottom:12px; pointer-events:auto; font-size:10px; color:#edf1e7; text-shadow:0 1px 4px #18251c; }
+#map-attribution a { color:inherit; }
+#help { max-width:300px; font-size:.72rem; }
+#mode-bar { bottom:30px; }
+@media(max-width:1000px) { #help { display:none; } }
+@media(max-width:720px) { #status { display:none!important; } #overlay .card { padding:28px; } #mode-bar { bottom:36px; } }

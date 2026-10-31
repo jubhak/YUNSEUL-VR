@@ -1,0 +1,27 @@
+{
+  "result": {
+    "downPitchDegrees": -18,
+    "zoomedPitchDegrees": -15.5,
+    "zoomedFov": 35,
+    "horizonVisible": true,
+    "noDrift": true,
+    "spawn": [
+      0,
+      1.7,
+      0
+    ],
+    "stats": {
+      "buildings": 353,
+      "roads": 877,
+      "tiles": 1
+    },
+    "treeCount": 380,
+    "planarReflection": true
+  },
+  "restart": {
+    "baseGroups": 1,
+    "buildings": 353
+  },
+  "codeErrors": [],
+  "expectedNetworkFailures": 152
+}
