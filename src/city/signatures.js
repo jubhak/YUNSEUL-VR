@@ -11,13 +11,18 @@ function material(name,color,metalness=0.15,roughness=0.55) {
   }
   return materials[name];
 }
-const glass=()=>material('glass',0x749bab,0.65,0.22);
+const glass=()=>material('glass',0x7f97ab,0.72,0.16);
+const brightGlass=()=>material('bright-glass',0x9fb6c6,0.86,0.09);
+const slateGlass=()=>material('slate-glass',0x2f4152,0.8,0.14);
+const bronzeGlass=()=>material('bronze-glass',0xb08752,0.85,0.14);
 const frame=()=>material('frame',0xc0c9c9,0.5,0.38);
 const white=()=>material('stone',0xd9d6cc,0.1,0.78);
 const dark=()=>material('dark',0x333d41,0.2,0.75);
 const roof=()=>material('tile',0x41494b,0.15,0.8);
 const timber=()=>material('timber',0x624431,0.1,0.85);
 const brick=()=>material('brick',0xc7a780,0.05,0.9);
+const concrete=()=>material('arts-concrete',0xb9b9ae,0.1,0.85);
+const metalRail=()=>material('rail-steel',0x9aa3a6,0.7,0.35);
 
 function layout(b) {
   // Longest mapped edge sets orientation; local extents retain the actual footprint dimensions.
@@ -42,8 +47,8 @@ function profile(g,points,depth,m,z=-depth/2) {
   const geo=new THREE.ExtrudeGeometry(shape,{depth,bevelEnabled:false});
   const mesh=new THREE.Mesh(geo,m);mesh.position.z=z;g.add(mesh);return mesh;
 }
-function bands(g,w,d,h,step=3.8,y0=0) {
-  for(let y=y0+step;y<h;y+=step)box(g,w+0.12,0.18,d+0.12,0,y,0,frame());
+function bands(g,w,d,h,step=3.8,y0=0,mat=frame()) {
+  for(let y=y0+step;y<h;y+=step)box(g,w+0.12,0.18,d+0.12,0,y,0,mat);
 }
 function pitched(g,w,d,y,rise,m,curved=false) {
   const pts=[];
@@ -54,6 +59,68 @@ function pitched(g,w,d,y,rise,m,curved=false) {
   } else pts.push([-half,y],[0,y+rise],[half,y],[half,y-0.25],[-half,y-0.25]);
   return profile(g,pts,d,m);
 }
+
+/**
+ * Lofted rectangular shaft. Each section is {y, w, d}; the crown section may give
+ * a per-corner y array, which is what produces the sheared diagonal roof of G-Tower.
+ */
+function loft(sections, materialForSide, topMaterial) {
+  const positions=[], normals=[];
+  const corner=(s,i)=>{
+    const hw=s.w/2,hd=s.d/2;
+    const pts=[{x:-hw,z:-hd},{x:hw,z:-hd},{x:hw,z:hd},{x:-hw,z:hd}];
+    const y=s.ys?s.ys[i]:s.y;
+    return {x:pts[i].x,y,z:pts[i].z};
+  };
+  const push=(a,b,c)=>{
+    positions.push(a.x,a.y,a.z,b.x,b.y,b.z,c.x,c.y,c.z);
+    const ux=b.x-a.x,uy=b.y-a.y,uz=b.z-a.z,vx=c.x-a.x,vy=c.y-a.y,vz=c.z-a.z;
+    const nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;
+    const len=Math.hypot(nx,ny,nz)||1;
+    normals.push(nx/len,ny/len,nz/len,nx/len,ny/len,nz/len,nx/len,ny/len,nz/len);
+  };
+  const buckets=[];
+  for(let s=0;s<sections.length-1;s++) {
+    const lower=sections[s],upper=sections[s+1];
+    for(let i=0;i<4;i++) {
+      const j=(i+1)%4;
+      const b0=corner(lower,i),b1=corner(lower,j),t0=corner(upper,i),t1=corner(upper,j);
+      const start=positions.length/3;
+      push(b0,t0,t1);push(b0,t1,b1);
+      buckets.push({start,count:positions.length/3-start,side:i});
+    }
+  }
+  const top=sections.at(-1);
+  if(top) {
+    const start=positions.length/3;
+    const c=[0,1,2,3].map(i=>corner(top,i));
+    push(c[3],c[2],c[1]);push(c[3],c[1],c[0]);
+    buckets.push({start,count:positions.length/3-start,side:4});
+  }
+  const group=new THREE.Group();
+  const bySide=new Map();
+  for(const b of buckets) {
+    if(!bySide.has(b.side))bySide.set(b.side,[]);
+    bySide.get(b.side).push(b);
+  }
+  for(const [side,list] of bySide) {
+    let count=0;
+    for(const b of list)count+=b.count;
+    const pos=new Float32Array(count*3),nor=new Float32Array(count*3);
+    let o=0;
+    for(const b of list) {
+      for(let k=0;k<b.count*3;k++){pos[o*3+k]=positions[b.start*3+k];nor[o*3+k]=normals[b.start*3+k];}
+      o+=b.count;
+    }
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+    geo.setAttribute('normal',new THREE.BufferAttribute(nor,3));
+    const mat=side===4&&topMaterial?topMaterial:materialForSide(side);
+    group.add(new THREE.Mesh(geo,mat));
+  }
+  return group;
+}
+
 function batch(g) {
   const buckets=new Map();
   for(const mesh of [...g.children]) {
@@ -73,6 +140,21 @@ function batch(g) {
   }
   return g;
 }
+
+function railing(g, w, d, y, h=1.15) {
+  const rail=metalRail();
+  for(const [x,z,wd] of [[0,-d/2,w],[0,d/2,w],[-w/2,0,d],[w/2,0,d]]) {
+    box(g,wd,0.09,0.09,x,y+h,z,rail);
+    if(x!==0) box(g,0.09,0.09,wd,x,y+h,z,rail);
+    const posts=Math.max(3,Math.floor((x===0?wd:wd)/3.2));
+    for(let i=0;i<=posts;i++) {
+      const t=-wd/2+wd*i/posts;
+      const px=x===0?x+t:x, pz=x===0?z:z+t;
+      box(g,0.08,h,0.08,px,y+h/2,pz,rail);
+    }
+  }
+}
+
 export function signatureKind(b) {
   const n=b.name||'';
   if(/G타워|G-Tower/.test(n))return 'g-tower';
@@ -89,23 +171,49 @@ export function signatureKind(b) {
   if(/Costco|홈플러스/.test(n))return 'retail';
   return null;
 }
+
 export function createSignatureBuilding(b) {
   const kind=signatureKind(b);if(!kind)return null;
   const l=layout(b),w=kind==='g-tower'?Math.min(l.w,44):l.w,d=kind==='g-tower'?Math.min(l.d,40):l.d,h=b.height;
   const g=new THREE.Group();g.name=`signature-${kind}-${b.id}`;
-  g.userData={kind,sourceId:b.id,accuracy:'procedural architectural approximation'};
+  g.userData={kind,sourceId:b.id,accuracy:'procedural architectural approximation',platforms:[]};
   if(kind==='g-tower') {
-    // Three-dimensional triangular sky-garden opening, not a black triangle painted on a box.
-    const shape=new THREE.Shape([new THREE.Vector2(-w/2,0),new THREE.Vector2(w/2,0),new THREE.Vector2(w/2,146),new THREE.Vector2(-w/2,132)]);
-    const hole=new THREE.Path();hole.moveTo(-w*0.39,119);hole.lineTo(w*0.39,137);hole.lineTo(w*0.39,113);hole.closePath();shape.holes.push(hole);
-    const shell=new THREE.Mesh(new THREE.ExtrudeGeometry(shape,{depth:d,bevelEnabled:false}),glass());shell.position.z=-d/2;g.add(shell);
-    for(let y=4.4;y<110;y+=4.4)box(g,w+0.2,0.25,d+0.2,0,y,0,frame());
-    profile(g,[[-w/2,0],[w/2,0],[w/2,14],[-w/2,4]],d*0.48,frame(),d/2);
-    for(let i=0;i<4;i++) {
-      const side=i%2?-1:1,y=24+i*22;
-      profile(g,[[side*w/2,y],[side*w/2,y+18],[side*w*0.1,y+8]],0.25,dark(),-d/2-0.2);
+    // Photo-matched massing: tapered shaft, three facets, sheared diagonal crown,
+    // horizontal mechanical bands, 145.8 m / 33 floors.
+    const H=145.8, baseW=w, baseD=d;
+    const shaft=loft(
+      [
+        {y:0,w:baseW*1.02,d:baseD*1.02},
+        {y:6,w:baseW,d:baseD},
+        {y:96,w:baseW*0.8,d:baseD*0.82},
+        {y:126,w:baseW*0.66,d:baseD*0.7},
+        {y:126,ys:[126,126,126,126],w:baseW*0.66,d:baseD*0.7},
+      ],
+      side=>(side===0||side===1)?brightGlass():slateGlass(),
+      slateGlass(),
+    );
+    // Rebate the crown: highest at the south-east corner, lowest opposite — the slanted top in the photo.
+    const crown=loft(
+      [
+        {y:126,w:baseW*0.66,d:baseD*0.7},
+        {y:0,ys:[H,H-6,H-18,H-26],w:baseW*0.6,d:baseD*0.62},
+      ],
+      side=>side===0?brightGlass():slateGlass(),
+      dark(),
+    );
+    g.add(shaft,crown);
+    for(let y=8;y<122;y+=5.4) {
+      const t=y/H, taper=1-0.34*t;
+      box(g,baseW*taper+0.22,0.22,baseD*taper+0.22,0,y,0,frame());
     }
-    box(g,w*0.7,0.5,d*0.65,0,114,0,material('garden',0x557452,0,1));
+    // Vertical facet creases and the lit corner column.
+    for(const x of [-baseW*0.31,0,baseW*0.31]) box(g,0.34,118,baseD*0.74, x*1.02, 59, 0, frame());
+    box(g,baseW*1.12,9,baseD*1.12,0,4.5,0,white());
+    box(g,baseW*0.94,3.2,baseD*0.94,0,10.4,0,dark());
+    // Rooftop sky garden on the low side of the sheared roof.
+    const garden=box(g,baseW*0.5,0.5,baseD*0.44,0,H-17,0,material('garden',0x557452,0,1));
+    garden.receiveShadow=true;
+    // Public observation deck is inside; the roof terrace is not walkable (no ramp access).
   } else if(kind==='neatt') {
     // Broad lower shaft, taper and oblique crown; 305 m from the OSM height tag.
     const height=305,shaft=height*0.87;
@@ -152,13 +260,53 @@ export function createSignatureBuilding(b) {
       box(g,unit*0.6,floor*0.6,0.2,r.position.x,floor*0.45,d/2+0.15,glass());
     }
   } else if(kind==='artscenter') {
+    /**
+     * Art Center Incheon: stepped stone masses on a glazed podium, with a walkable
+     * open-air roof over the concert hall that looks out over the waterfront lake.
+     */
+    const roofY=42.8, roofW=w*0.72, roofD=d*0.66;
     box(g,w,14,d,0,7,0,glass());
-    const stone=material('arts-concrete',0xb9b9ae,0.1,0.85);
     for(let i=0;i<5;i++) {
       const z=-d/2+d*(i+0.5)/5,raise=(i%2)*5;
-      const pts=[[-w/2,14],[-w*0.35,31+raise],[-w*0.08,42.8],[w*0.4,36],[w/2,20],[w/2,14]];
-      const m=profile(g,pts,d/5+0.2,stone,-d/10);m.position.z=z-d/10;
+      const pts=[[-w/2,14],[-w*0.35,31+raise],[-w*0.08,roofY],[w*0.4,36],[w/2,20],[w/2,14]];
+      const m=profile(g,pts,d/5+0.2,concrete(),-d/10);m.position.z=z-d/10;
     }
+    // Roof slab + open terrace, lake-facing.
+    box(g,roofW,1.1,roofD,0,roofY-0.55,0,concrete());
+    box(g,roofW*0.94,0.12,roofD*0.94,0,roofY+0.03,0,material('deck',0xa9a49a,0.05,0.9));
+    railing(g,roofW,roofD,roofY+0.06);
+    // Roof pavilion / skylight over the hall.
+    box(g,roofW*0.42,4.4,roofD*0.3,-roofW*0.16,roofY+2.2,roofD*0.12,white());
+    box(g,roofW*0.36,0.3,roofD*0.26,-roofW*0.16,roofY+4.5,roofD*0.12,metalRail());
+    // Two switchback stair/ramp flights on the landward +x side, so the terrace is reachable on foot.
+    // Single long inclined flight: plaza -> roof terrace, geometry and walkable platform share one ramp.
+    const flightW = 6.4, run = 74, flightZ = -roofD * 0.08;
+    const rampX0 = roofW / 2, rampX1 = roofW / 2 + run;
+    const ramp = new THREE.Mesh(new THREE.BoxGeometry(run, 0.55, flightW), concrete());
+    ramp.position.set((rampX0 + rampX1) / 2, roofY / 2 - 0.1, flightZ);
+    ramp.rotation.z = -Math.atan2(roofY, run);
+    g.add(ramp);
+    for (let k = 0; k <= 14; k++) {
+      const t = k / 14;
+      const x = rampX0 + run * t;
+      const y = roofY * (1 - t);
+      box(g, 0.1, 1.1, flightW, x, y + 0.55, flightZ, metalRail());
+      if (k % 3 === 0) box(g, 0.5, y + 0.9, 0.4, x, (y + 0.9) / 2, flightZ - flightW / 2 + 0.3, metalRail());
+    }
+    g.userData.platforms.push({
+      footprint: [
+        { x: rampX0, z: flightZ - flightW / 2 }, { x: rampX1, z: flightZ - flightW / 2 },
+        { x: rampX1, z: flightZ + flightW / 2 }, { x: rampX0, z: flightZ + flightW / 2 },
+      ],
+      ramp: { ax: rampX0, az: flightZ, h0: roofY, bx: rampX1, bz: flightZ, h1: 0 },
+    });
+    // Terrace itself is a walkable platform.
+    g.userData.platforms.push({
+      footprint:[
+        {x:-roofW/2,z:-roofD/2},{x:roofW/2,z:-roofD/2},{x:roofW/2,z:roofD/2},{x:-roofW/2,z:roofD/2},
+      ],
+      height:roofY+0.09,
+    });
   } else if(kind==='central-hotel') {
     const height=82;
     box(g,w,10,d,0,5,0,white());box(g,w*0.84,height-10,d*0.78,0,(height+10)/2,0,white());
@@ -169,7 +317,7 @@ export function createSignatureBuilding(b) {
   } else if(kind==='posco-enc') {
     box(g,w,14,d,0,7,0,white());
     for(const x of [-w*0.27,w*0.27]) {
-      box(g,w*0.35,175,d*0.7,x,101.5,0,glass());
+      box(g,w*0.35,175,d*0.7,x,101.5,0,bronzeGlass());
       for(let y=20;y<188;y+=4.2)box(g,w*0.35+0.1,0.18,d*0.7+0.1,x,y,0,frame());
     }
     box(g,w*0.9,4,d*0.5,0,174,0,frame());
@@ -194,5 +342,17 @@ export function createSignatureBuilding(b) {
     box(g,w*0.9,2.5,0.25,0,Math.max(h-3,3),d/2+0.2,red);
     box(g,w*0.6,3,0.2,0,2,d/2+0.3,glass());
   }
-  batch(g);g.position.set(l.x,0,l.z);g.rotation.y=-l.angle;return g;
+  batch(g);g.position.set(l.x,0,l.z);g.rotation.y=-l.angle;
+  // Signed platform footprints must follow the same local transform as the geometry.
+  if(g.userData.platforms.length) {
+    const co=Math.cos(-l.angle),si=Math.sin(-l.angle);
+    g.userData.platforms=g.userData.platforms.map(p=>{
+      const tf=q=>({x:l.x+q.x*co-q.z*si,z:l.z+q.x*si+q.z*co});
+      const footprint=p.footprint.map(tf);
+      const ramp=p.ramp?{...tf({x:p.ramp.ax,z:p.ramp.az}),h0:p.ramp.h0,bx:tf({x:p.ramp.bx,z:p.ramp.bz}).x,bz:tf({x:p.ramp.bx,z:p.ramp.bz}).z,h1:p.ramp.h1}:undefined;
+      if(ramp){ramp.ax=tf({x:p.ramp.ax,z:p.ramp.az}).x;ramp.az=tf({x:p.ramp.ax,z:p.ramp.az}).z;}
+      return {footprint,height:p.height,ramp};
+    });
+  }
+  return g;
 }

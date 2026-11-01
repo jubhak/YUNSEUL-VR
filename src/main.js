@@ -1,6 +1,6 @@
 import "./style.css";
 import * as THREE from "three";
-import { SONGDO, SPAWN } from "./config.js";
+import { SONGDO, SPAWN, ARTS_CENTER } from "./config.js";
 import { createProjector } from "./geo/project.js";
 import { clearOsmCache } from "./geo/overpass.js";
 import { CityStreamer } from "./city/streamer.js";
@@ -30,11 +30,16 @@ let streamer = null;
 let loaded = false;
 let starting = false;
 
+function applyPlatforms() {
+  player.setPlatforms(streamer.getPlatforms());
+}
+
 async function startCity({ forceRefresh = false } = {}) {
   if (forceRefresh) clearOsmCache();
 
   loaded = false;
   player.setColliders([]);
+  player.setPlatforms([]);
   streamer?.clear();
   hud.setProgress(12, "센트럴파크 지도·수변 환경 준비…");
 
@@ -72,17 +77,37 @@ async function startCity({ forceRefresh = false } = {}) {
     },
   });
   player.setColliders(streamer.getColliders());
-  hud.setDestinations(streamer.destinations || [], (destination) => {
-    const p=destination.arrival || destination.position;
-    player.position.set(p.x,player.mode.eyeHeight,p.z);
-    player.velocity.set(0,0,0);player.verticalVel=0;player.onGround=true;
-    player.keys.clear();player.pitch=0;
-    if(destination.position) {
-      player.yaw=Math.atan2(-(destination.position.x-p.x),-(destination.position.z-p.z));
-      const distance=Math.hypot(destination.position.x-p.x,destination.position.z-p.z);
-      player.pitch=Math.min(0.42,Math.atan2((destination.height||0)*0.35,Math.max(distance,1)));
+  applyPlatforms();
+  const destinations = [...(streamer.destinations || [])];
+  // 옥상 테라스 목적지는 실제로 생성된 옥상 플랫폼에서 좌표를 가져온다.
+  const terrace = streamer.getPlatforms().find(p => p.height > 40 && !p.ramp);
+  const roofPoint = terrace ? {
+    x: terrace.footprint.reduce((n, v) => n + v.x, 0) / terrace.footprint.length,
+    z: terrace.footprint.reduce((n, v) => n + v.z, 0) / terrace.footprint.length,
+    height: terrace.height,
+  } : { x: ARTS_CENTER.x, z: ARTS_CENTER.z, height: ARTS_CENTER.roofHeight };
+  destinations.push({
+    id: "arts-center-roof",
+    name: ARTS_CENTER.name,
+    position: { x: ARTS_CENTER.x, z: ARTS_CENTER.z },
+    arrival: { x: roofPoint.x, z: roofPoint.z },
+    roof: { height: roofPoint.height },
+  });
+  hud.setDestinations(destinations, (destination) => {
+    const p = destination.arrival || destination.position;
+    player.setPlatforms(streamer.getPlatforms());
+    player.position.set(p.x, 0, p.z);
+    // 목적지가 옥상이면 그 높이에서 시작한다.
+    player.position.y = (destination.roof ? destination.roof.height : 0) + player.mode.eyeHeight;
+    player.velocity.set(0, 0, 0); player.verticalVel = 0; player.onGround = true;
+    player.keys.clear(); player.pitch = 0;
+    if (destination.position) {
+      player.yaw = Math.atan2(-(destination.position.x - p.x), -(destination.position.z - p.z));
+      const distance = Math.hypot(destination.position.x - p.x, destination.position.z - p.z);
+      player.pitch = Math.min(0.42, Math.atan2((destination.height || 0) * 0.35, Math.max(distance, 1)));
     }
-    streamer.requestAround(p.x,p.z);player.update(0);
+    streamer.requestAround(p.x, p.z);
+    player.update(0);
   });
   loaded = true;
 
@@ -129,6 +154,18 @@ startCity().then(() => hud.hideOverlay()).catch(e => {
 if (import.meta.env.DEV) {
   window.__YUNSEUL_DEV__ = { player, scene, camera, renderer, get streamer() { return streamer; } };
 }
+// Automated verification hook (harmless in production builds).
+window.__YUNSEUL__ = {
+  player, scene, camera, renderer,
+  get streamer() { return streamer; },
+  get loaded() { return loaded; },
+  teleport(x, z, yaw = player.yaw, pitch = 0) {
+    player.position.set(x, player.mode.eyeHeight, z);
+    player.yaw = yaw; player.pitch = pitch;
+    player.velocity.set(0, 0, 0); player.update(0);
+    streamer?.requestAround(x, z);
+  },
+};
 
 const tmp = new THREE.Vector3();
 let lastTime = performance.now();
@@ -172,6 +209,7 @@ renderer.setAnimationLoop(() => {
     if (colliderTick > 0.4) {
       colliderTick = 0;
       player.setColliders(streamer.getColliders());
+      applyPlatforms();
     }
     sun.position.copy(player.position).addScaledVector(sunDirection, 650);
     sun.target.position.copy(player.position);

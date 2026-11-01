@@ -8,13 +8,17 @@ function nearestPoint(p, a, b) {
 function ringFor(c) {
   return c.footprint || [{x:c.minX,z:c.minZ},{x:c.maxX,z:c.minZ},{x:c.maxX,z:c.maxZ},{x:c.minX,z:c.maxZ}];
 }
-export function resolveMovement(start, target, colliders, radius=0.55) {
+/**
+ * @param {number} eyeY 현재 발/눈 높이. 옥상·계단 위에서 건물 자체와 충돌하지 않게 한다.
+ */
+export function resolveMovement(start, target, colliders, radius=0.55, eyeY=0) {
   let p={x:start.x,z:start.z};
   const distance=Math.hypot(target.x-start.x,target.z-start.z);
   const steps=Math.max(1,Math.ceil(distance/Math.max(radius*0.65,0.1)));
   const dx=(target.x-start.x)/steps, dz=(target.z-start.z)/steps;
   // Ignore a newly streamed building that encloses the current player, until they can leave it.
-  const candidates=colliders.filter(c=>c.height>=1.2 &&
+  // Also ignore a building the player is already standing on top of (rooftop terrace).
+  const candidates=colliders.filter(c=>c.height>=1.2 && eyeY<c.height-0.45 &&
     Math.max(start.x,target.x)+radius>=c.minX && Math.min(start.x,target.x)-radius<=c.maxX &&
     Math.max(start.z,target.z)+radius>=c.minZ && Math.min(start.z,target.z)-radius<=c.maxZ &&
     !pointInPolygon(start,{footprint:ringFor(c),holes:c.holes||[]}));

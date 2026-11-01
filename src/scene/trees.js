@@ -58,9 +58,9 @@ export function createTrees(positions, seed=71) {
       const a=random()*Math.PI*2, v=random()*2-1, radius=Math.cbrt(random()),r=w*radius*Math.sqrt(1-v*v);
       dummy.position.set(p.x+Math.cos(a)*r,h*0.7+v*radius*h*0.32,p.z+Math.sin(a)*r);
       dummy.rotation.set(random()*Math.PI,random()*Math.PI*2,random()*Math.PI);
-      const size=2.1+random()*1.2;dummy.scale.set(size,size,1);dummy.updateMatrix();
+      const size=1.45+random()*0.85;dummy.scale.set(size,size,1);dummy.updateMatrix();
       leaves.setMatrixAt(li,dummy.matrix);
-      color.setHSL(0.22+tint*0.07,0.27+random()*0.17,0.31+random()*0.14);
+      color.setHSL(0.24+tint*0.06,0.34+random()*0.12,0.24+random()*0.1);
       leaves.setColorAt(li++,color);
     }
   }

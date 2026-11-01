@@ -1,0 +1,79 @@
+{
+  "spawn": "01-spawn.png",
+  "wheelDown": {
+    "before": {
+      "pitch": 0,
+      "fov": 65
+    },
+    "after": {
+      "pitch": -1.4835298641951802,
+      "fov": 65
+    },
+    "pitchDeg": -85
+  },
+  "ground": "02-wheel-ground.png",
+  "wheelUp": {
+    "pitchDeg": 85,
+    "fov": 65
+  },
+  "sky": "03-wheel-sky.png",
+  "roof": {
+    "platformCount": 4,
+    "terraceHeight": 42.89,
+    "ramp": {
+      "x": -1141.896259715518,
+      "z": -116.00340353648792,
+      "h0": 42.8,
+      "bx": -1215.0415053078104,
+      "bz": -127.21826186119429,
+      "h1": 0,
+      "ax": -1141.896259715518,
+      "az": -116.00340353648792
+    },
+    "eyeY": 1.7,
+    "standingOn": 0
+  },
+  "roofShot": "04-arts-center-roof.png",
+  "rampWalk": {
+    "from": {
+      "x": -1217.0415053078104,
+      "z": -127.21826186119429
+    },
+    "eyeY": 36.5,
+    "ground": 35.23,
+    "rampTop": 42.8
+  },
+  "bridge": {
+    "pylon": {
+      "x": -4579.08,
+      "z": -1415.53,
+      "deckY": 46,
+      "height": 238.5
+    },
+    "from": {
+      "x": -3959,
+      "z": -896
+    },
+    "mastHeight": 238.5
+  },
+  "bridgeShot": "05-incheon-bridge.png",
+  "sculptures": {
+    "count": 0,
+    "kinds": []
+  },
+  "sculptureShot": "06-park-sculpture.png",
+  "stats": {
+    "stats": {
+      "buildings": 374,
+      "roads": 933,
+      "tiles": 73
+    },
+    "platforms": 0,
+    "colliders": 374,
+    "calls": 40,
+    "triangles": 564910,
+    "lowPower": true
+  },
+  "errors": [],
+  "warnings": []
+}

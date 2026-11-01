@@ -1,0 +1,60 @@
+{
+  "spawn": "f01-spawn",
+  "wheel": {
+    "pitchDeg": 85,
+    "fov": 65
+  },
+  "sky": "f02-sky",
+  "wheelDown": {
+    "pitchDeg": -85
+  },
+  "ground": "f03-ground",
+  "roof": {
+    "eyeY": 1.7,
+    "standingOn": 0,
+    "platforms": 4
+  },
+  "roofShot": "f04-arts-center-roof",
+  "sculpture": {
+    "count": 17,
+    "kinds": [
+      "totem",
+      "horn",
+      "ring"
+    ],
+    "target": {
+      "kind": "horn",
+      "sourceId": "node-4675848806",
+      "name": "Wall Print",
+      "accuracy": "procedural sculpture approximation",
+      "x": 1162.39,
+      "z": -175.35
+    }
+  },
+  "sculptureShot": "f05-sculpture",
+  "bridge": {
+    "pylon": {
+      "x": -4579.08,
+      "z": -1415.53,
+      "deckY": 46,
+      "height": 238.5
+    },
+    "mastHeight": 238.5,
+    "from": {
+      "x": -4019,
+      "z": -946
+    }
+  },
+  "bridgeShot": "f06-bridge",
+  "stats": {
+    "stats": {
+      "buildings": 353,
+      "roads": 879,
+      "tiles": 64
+    },
+    "sculptures": 17,
+    "platforms": 0,
+    "calls": 39
+  },
+  "errors": []
+}

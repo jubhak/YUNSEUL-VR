@@ -4,9 +4,10 @@ import { fetchOsmBbox } from "../geo/overpass.js";
 import { parseOsmCity } from "./parseOsm.js";
 import { createBuildingsGroup,createRoadsGroup,createParkGroup,createWaterGroup,createFlatPolygons,disposeObject3D } from "./buildMeshes.js";
 import { createFacadeMaterial,createWaterMaterial,createAsphaltMaterial,createGrassMaterial,updateMaterialTime } from "./materials.js";
-import { createParkDetails } from "../scene/parkDetails.js";
+import { createParkDetails, createSculptures } from "../scene/parkDetails.js";
 import { createMappedDetails, createExplorationGround } from "./surfaces.js";
 import { installCanalReflection } from "../scene/water.js";
+import { createWaterfront } from "../scene/waterfront.js";
 
 const kinds=["buildings","roads","parks","waters","parking","artworks"];
 let snapshotPromise;
@@ -19,7 +20,7 @@ function loadSnapshot() {
 export class CityStreamer {
   constructor({sceneRoot,projector,onStats,onStatus,sunDirection}) {
     Object.assign(this,{root:sceneRoot,projector,onStats,onStatus,sunDirection});
-    this.tiles=new Map();this.queue=[];this.activeFetches=0;this.baseColliders=[];
+    this.tiles=new Map();this.queue=[];this.activeFetches=0;this.baseColliders=[];this.basePlatforms=[];
     this.stats={buildings:0,roads:0,tiles:0};this.baseCounts={buildings:0,roads:0};
     this.facadeMat=createFacadeMaterial();this.waterMat=createWaterMaterial();
     this.asphaltMat=createAsphaltMaterial();this.grassMat=createGrassMaterial();
@@ -36,6 +37,8 @@ export class CityStreamer {
     return {south:sw.lat-0.0001,west:sw.lon-0.0001,north:ne.lat+0.0001,east:ne.lon+0.0001};
   }
   getColliders() {return [...this.baseColliders,...[...this.tiles.values()].flatMap(t=>t.colliders||[])];}
+  /** 옥상·램프처럼 걸어 올라갈 수 있는 상부 면 전체 */
+  getPlatforms() {return [...this.basePlatforms,...[...this.tiles.values()].flatMap(t=>t.platforms||[])];}
   #stats() {
     const ready=[...this.tiles.values()].filter(t=>t.state==="ready");
     this.stats={
@@ -50,7 +53,7 @@ export class CityStreamer {
     const buildings=createBuildingsGroup(city.buildings,this.facadeMat);
     const water=createWaterGroup(city.waters,this.waterMat);
     group.add(createParkGroup(city.parks,this.grassMat),water,createRoadsGroup(city.roads,this.asphaltMat),buildings.group,createMappedDetails(city));
-    return {group,water,colliders:buildings.colliders,counts:{buildings:city.buildings.length,roads:city.roads.length}};
+    return {group,water,colliders:buildings.colliders,platforms:buildings.platforms||[],counts:{buildings:city.buildings.length,roads:city.roads.length}};
   }
   async boot(x,z,{onProgress}={}) {
     onProgress?.(0.1,"센트럴파크 실제 수로·산책로 불러오는 중…");
@@ -60,6 +63,8 @@ export class CityStreamer {
     ]); if(this.disposed)return;
     if(manifest.tileSizeM!==STREAM.tileSizeM)throw new Error("지도 타일 크기가 설정과 일치하지 않습니다");
     this.offlineTiles=new Set(manifest.tiles);this.destinations=manifest.destinations;
+    // 랜드마크 구역/높이는 스냅샷 밖 타일에도 반드시 적용해야 한다.
+    this.overrides=manifest.buildingOverrides||{};
     const city=parseOsmCity(data,this.projector.project);
     for(const b of city.buildings)Object.assign(b,manifest.buildingOverrides?.[b.id] || {});
     this.ground=createExplorationGround(this.projector);this.root.add(this.ground);
@@ -68,11 +73,38 @@ export class CityStreamer {
     const built=this.#build(city);built.group.name="central-park-map";
     built.group.add(createParkDetails(city,{x,z}));
     this.baseColliders.push(...built.colliders);
+    this.basePlatforms.push(...(built.platforms||[]));
     this.baseCounts=built.counts;this.snapshotGroup=built.group;this.root.add(built.group);
     this.reflection=installCanalReflection(built.water,this.sunDirection);
+    // 센트럴파크 조형물: OSM tourism=artwork 위치 (스냅샷 밖 타일에서 누락되지 않도록 별도 파일)
+    try {
+      const sculptures = await fetch(`${this.baseUrl}data/park-sculptures.json`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+      const layer = createSculptures(sculptures.items, city);
+      built.group.add(layer);
+      this.sculptures = layer.userData.items || [];
+      this.sculptureCount = layer.userData.count || 0;
+    } catch(e) { console.info('Sculpture layer unavailable:', e.message); }
+    // 바다·해안 산책로·인천대교 (OSM coastline / bridge centreline 기반)
+    try {
+      this.waterfront=await createWaterfront({baseUrl:this.baseUrl,player:{position:{x,z}},scene:this.root});
+      this.root.add(this.waterfront.group);
+      this.destinations=[...this.destinations,...this.waterfront.destinations];
+    } catch(e) {
+      console.info('Waterfront layer unavailable:',e.message);
+    }
     this.#stats();onProgress?.(1,"송도 센트럴파크 수변 산책로 준비 완료");
     this.onStatus?.("송도 전체 기본 지도 · 구역별 자동 로딩");
     this.requestAround(x,z,{radius:STREAM.loadRadius});
+    this.preloadLandmarks([{x:-963,z:-108},{x:-395,z:-354},{x:487,z:403},{x:725,z:431},{x:-340,z:-151}]);
+  }
+  /** 랜드마크 타일을 미리 요청해 시그니처 모델(옥상·타워)이 처음부터 존재하게 한다. */
+  preloadLandmarks(points=[]) {
+    for(const p of points) {
+      const {tx,tz}=this.worldToTile(p.x,p.z),key=`${tx},${tz}`;
+      if(this.tiles.has(key))continue;
+      const tile={key,tx,tz,state:"queued"};this.tiles.set(key,tile);this.queue.push(tile);
+    }
+    this.#pump();
   }
   requestAround(x,z,{radius=STREAM.loadRadius}={}) {
     if(this.disposed)return;
@@ -136,6 +168,7 @@ export class CityStreamer {
       if(this.snapshotIds.has(id)||this.featureOwners.has(id))return false;
       this.featureOwners.set(id,job.key);job.owned.push(id);return true;
     });
+    for(const b of city.buildings||[]) if(this.overrides[b.id]) Object.assign(b,this.overrides[b.id]);
     Object.assign(job,this.#build(city));job.group.name=`tile-${job.key}`;job.state="ready";
     this.root.add(job.group);this.#stats();
     this.onStatus?.(`송도 · 건물 ${this.stats.buildings} · 도로 ${this.stats.roads}`);
@@ -161,7 +194,7 @@ export class CityStreamer {
         job.needsRefresh=false;job.state="queued";this.queue.push(job);
       }
     }
-    updateMaterialTime(this.waterMat,time);this.reflection?.update(time,isXR);this.#pump();
+    updateMaterialTime(this.waterMat,time);this.reflection?.update(time,isXR);this.waterfront?.update(time);this.#pump();
   }
   clear() {
     if(this.disposed)return;this.disposed=true;this.abort.abort();this.queue=[];
@@ -169,6 +202,7 @@ export class CityStreamer {
     for(const tile of this.tiles.values()) if(tile.group){this.root.remove(tile.group);disposeObject3D(tile.group);}
     if(this.snapshotGroup){this.root.remove(this.snapshotGroup);disposeObject3D(this.snapshotGroup);}
     if(this.ground){this.root.remove(this.ground);disposeObject3D(this.ground);}
+    if(this.waterfront){this.root.remove(this.waterfront.group);this.waterfront=null;}
     this.featurePromises.clear();this.materials.forEach(m=>m.dispose());this.tiles.clear();this.featureOwners.clear();
   }
 }

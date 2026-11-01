@@ -112,7 +112,7 @@ export function createFacadeMaterial() {
 export function createWaterMaterial() {
   const time = { value: 0 };
   const material = new THREE.MeshPhysicalMaterial({
-    color: 0x396c69, roughness: 0.17, metalness: 0.12,
+    color: 0x2c4d55, roughness: 0.15, metalness: 0.12,
     clearcoat: 1, clearcoatRoughness: 0.13,
     ior: 1.333, envMapIntensity: 1.1, side: THREE.DoubleSide,
   });

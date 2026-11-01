@@ -108,6 +108,8 @@ export function createBuildingsGroup(buildings, sharedFacadeMat) {
   group.name = "buildings";
   const colliders = [];
   const geometries = [];
+  /** Walkable upper surfaces (rooftop terraces, ramps) contributed by landmark models. */
+  const platforms = [];
 
   for (const b of buildings) {
     if (b.footprint.length < 3) continue;
@@ -135,7 +137,11 @@ export function createBuildingsGroup(buildings, sharedFacadeMat) {
       }
       geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
       const signature = createSignatureBuilding(b);
-      if (signature) {geo.dispose();group.add(signature);} else geometries.push(geo);
+      if (signature) {
+        geo.dispose();
+        group.add(signature);
+        if (signature.userData?.platforms?.length) platforms.push(...signature.userData.platforms);
+      } else geometries.push(geo);
 
       let minX = Infinity,
         maxX = -Infinity,
@@ -171,7 +177,7 @@ export function createBuildingsGroup(buildings, sharedFacadeMat) {
     group.add(mesh);
   }
 
-  return { group, colliders, count: buildings.length };
+  return { group, colliders, platforms, count: buildings.length };
 }
 
 export function createRoadsGroup(roads, sharedAsphaltMat) {

@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { MODES, LOOK } from "../config.js";
 import { resolveMovement } from "./collision.js";
 import { clampPitch } from "./look.js";
+import { pointInPolygon } from "../city/parseOsm.js";
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -15,6 +16,9 @@ export class PlayerController {
     this.domElement = domElement;
     this.colliders = colliders || [];
 
+    /** 걸을 수 있는 상부 면(옥상·계단·램프). 없으면 지면(0m). */
+    this.platforms = [];
+
     this.mode = MODES.walk;
     this.position = new THREE.Vector3(0, this.mode.eyeHeight, 48);
     this.velocity = new THREE.Vector3();
@@ -23,6 +27,7 @@ export class PlayerController {
     this.locked = false;
     this.verticalVel = 0;
     this.onGround = true;
+    this.floorY = this.mode.eyeHeight;
 
     /** 원하는 각속도 (rad/s), 매 프레임 한도로 클램프 후 적용하고 비움 */
     this._yawVel = 0;
@@ -69,12 +74,36 @@ export class PlayerController {
     const next = MODES[id];
     if (!next) return;
     this.mode = next;
-    this.position.y = next.eyeHeight;
+    this.position.y = Math.max(next.eyeHeight, this.#surfaceAt(this.position.x, this.position.z) + next.eyeHeight);
     this.onModeChange?.(next);
   }
 
   setColliders(colliders) {
     this.colliders = colliders;
+  }
+
+  setPlatforms(platforms) {
+    this.platforms = platforms || [];
+  }
+
+  /** 발밑 상부 면의 높이(지면 기준 m). 옥상·계단·램프를 포함한다. */
+  #surfaceAt(x, z) {
+    let best = 0;
+    for (const surface of this.platforms) {
+      if (!surface?.footprint || surface.footprint.length < 3) continue;
+      if (!pointInPolygon({ x, z }, { footprint: surface.footprint, holes: surface.holes || [] })) continue;
+      let height = surface.height ?? 0;
+      const ramp = surface.ramp;
+      if (ramp) {
+        const dx = ramp.bx - ramp.ax;
+        const dz = ramp.bz - ramp.az;
+        const den = dx * dx + dz * dz || 1;
+        const t = Math.max(0, Math.min(1, ((x - ramp.ax) * dx + (z - ramp.az) * dz) / den));
+        height = ramp.h0 + (ramp.h1 - ramp.h0) * t;
+      }
+      if (height > best) best = height;
+    }
+    return best;
   }
 
   requestLock() {
@@ -87,23 +116,26 @@ export class PlayerController {
   }
 
   #onMouseMove(e) {
-    // Unlocked canvas movement works immediately; pointer lock is optional, not a gate.
-    // 프레임당 여러 mousemove가 올 수 있어 합산하되,
-    // update에서 각속도 상한으로만 소비하고 나머지는 전부 폐기
+    // Unlocks-free canvas movement: pointer lock is optional, not a gate.
     this._yawVel -= e.movementX * LOOK.yawGain * 60;
     this._pitchVel -= e.movementY * LOOK.pitchGain * 60;
   }
 
+  /**
+   * 휠 = 시선 상하(하늘↔땅). Shift+휠만 화각(줌)을 바꾼다.
+   * 휠을 내리면 땅을, 올리면 하늘을 본다.
+   */
   #onWheel(e) {
     e.preventDefault();
-    const dir = Math.sign(e.deltaY);
-    this.camera.fov = clamp(
-      this.camera.fov + dir * LOOK.zoomStep,
-      LOOK.fovMin,
-      LOOK.fovMax,
-    );
-    this.pitch = clampPitch(this.pitch, this.camera.fov);
-    this.camera.updateProjectionMatrix();
+    if (e.shiftKey) {
+      const dir = Math.sign(e.deltaY);
+      this.camera.fov = clamp(this.camera.fov + dir * LOOK.zoomStep, LOOK.fovMin, LOOK.fovMax);
+      this.camera.updateProjectionMatrix();
+      return;
+    }
+    const delta = clamp(e.deltaY, -240, 240);
+    this.pitch = clampPitch(this.pitch - delta * LOOK.wheelPitchGain);
+    this._pitchVel = 0;
   }
 
   #wishDir() {
@@ -131,7 +163,13 @@ export class PlayerController {
   }
 
   #resolveCollisions(nextX, nextZ, radius = 0.55) {
-    return resolveMovement(this.position, {x:nextX,z:nextZ}, this.colliders, radius);
+    return resolveMovement(
+      this.position,
+      { x: nextX, z: nextZ },
+      this.colliders,
+      radius,
+      this.position.y,
+    );
   }
 
   #applyLook(dt) {
@@ -143,7 +181,7 @@ export class PlayerController {
 
     const turn = Number(this.keys.has("ArrowLeft")) - Number(this.keys.has("ArrowRight"));
     this.yaw += (yawRate + turn * LOOK.keyboardYawRate) * dt;
-    this.pitch = clampPitch(this.pitch + pitchRate * dt, this.camera.fov);
+    this.pitch = clampPitch(this.pitch + pitchRate * dt);
   }
 
   update(dt) {
@@ -172,25 +210,31 @@ export class PlayerController {
       this.velocity.z *= s;
     }
 
-    if (mode.canJump) {
-      this.verticalVel -= 18 * dt;
-      this.position.y += this.verticalVel * dt;
-      if (this.position.y <= mode.eyeHeight) {
-        this.position.y = mode.eyeHeight;
-        this.verticalVel = 0;
-        this.onGround = true;
-      }
-    } else {
-      this.position.y = mode.eyeHeight;
-      this.verticalVel = 0;
-      this.onGround = true;
-    }
-
     const nextX = this.position.x + this.velocity.x * dt;
     const nextZ = this.position.z + this.velocity.z * dt;
     const resolved = this.#resolveCollisions(nextX, nextZ);
     this.position.x = resolved.x;
     this.position.z = resolved.z;
+
+    // 옥상·계단·램프는 발밑 높이를 바꾼다.
+    const floor = this.#surfaceAt(this.position.x, this.position.z) + mode.eyeHeight;
+    this.floorY = floor;
+    if (mode.canJump && !this.onGround) {
+      this.verticalVel -= 18 * dt;
+      this.position.y += this.verticalVel * dt;
+      if (this.position.y <= floor) {
+        this.position.y = floor;
+        this.verticalVel = 0;
+        this.onGround = true;
+      }
+    } else {
+      const diff = floor - this.position.y;
+      // 계단·램프는 부드럽게, 옥상 진입처럼 큰 단차는 즉시 따라간다.
+      if (Math.abs(diff) < 0.02 || Math.abs(diff) > 1.2) this.position.y = floor;
+      else this.position.y += diff * Math.min(1, dt * 16);
+      this.verticalVel = 0;
+      this.onGround = true;
+    }
 
     this.camera.position.copy(this.position);
     const look = new THREE.Vector3(
@@ -203,6 +247,11 @@ export class PlayerController {
 
   getSpeedKmh() {
     return Math.hypot(this.velocity.x, this.velocity.z) * 3.6;
+  }
+
+  /** 지금 서 있는 면의 높이 (m, 지면 기준) */
+  getGroundHeight() {
+    return Math.max(0, this.#surfaceAt(this.position.x, this.position.z));
   }
 
   applyXrMove(forwardDir, rightDir, ax, ay, dt) {
@@ -218,7 +267,7 @@ export class PlayerController {
     const resolved = this.#resolveCollisions(nextX, nextZ);
     this.position.x = resolved.x;
     this.position.z = resolved.z;
-    this.position.y = this.mode.eyeHeight;
+    this.position.y = this.#surfaceAt(resolved.x, resolved.z) + this.mode.eyeHeight;
     this.camera.position.copy(this.position);
   }
 

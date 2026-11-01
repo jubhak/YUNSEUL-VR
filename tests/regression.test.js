@@ -13,28 +13,31 @@ const projector=createProjector(SONGDO.center.lat,SONGDO.center.lon);
 const city=parseOsmCity(data,projector.project);
 const spawn=projector.project(SPAWN.lon,SPAWN.lat);
 
-test('default downward pitch is limited to 18 degrees',()=>{
-  assert.ok(Math.abs(clampPitch(-100000,65)+Math.PI/10)<1e-10);
-  assert.equal(clampPitch(100000,65),LOOK.pitchUp);
+test('wheel look reaches sky and ground within a +/-85 degree guard band',()=>{
+  assert.ok(Math.abs(LOOK.pitchUp-85*Math.PI/180)<1e-12);
+  assert.ok(Math.abs(LOOK.pitchDown-85*Math.PI/180)<1e-12);
+  assert.ok(Math.abs(clampPitch(-100000)+LOOK.pitchDown)<1e-12);
+  assert.ok(Math.abs(clampPitch(100000)-LOOK.pitchUp)<1e-12);
 });
-test('horizon stays visible at every allowed zoom level',()=>{
+test('pitch bounds are symmetric and independent of the zoom level',()=>{
   for(let fov=LOOK.fovMin;fov<=LOOK.fovMax;fov+=0.25){
-    const min=clampPitch(-10000,fov);
-    assert.ok(min+fov*Math.PI/360>=LOOK.horizonMargin-1e-10);
-    assert.ok(min>=-LOOK.pitchDown-1e-10);
+    const bounds=pitchBounds(fov);
+    assert.equal(bounds.min,-LOOK.pitchDown);
+    assert.equal(bounds.max,LOOK.pitchUp);
+    assert.equal(clampPitch(-10000,fov),bounds.min);
   }
-  assert.ok(Math.abs(pitchBounds(35).min*180/Math.PI+15.5)<1e-10);
+  assert.ok(Math.abs(pitchBounds(35).min*180/Math.PI+85)<1e-9);
 });
 test('actual controller discards excessive input without downward drift',()=>{
   globalThis.window=new EventTarget();globalThis.document=new EventTarget();
   const canvas=new EventTarget();const camera=new THREE.PerspectiveCamera();
   const player=new PlayerController(camera,canvas,[]);
   for(let i=0;i<5000;i++){player._pitchVel=-1e9;player.update(1/60);}
-  assert.ok(Math.abs(player.pitch+Math.PI/10)<1e-9);
+  assert.ok(Math.abs(player.pitch+LOOK.pitchDown)<1e-9);
   for(let i=0;i<1000;i++)player.update(1/60);
-  assert.ok(Math.abs(player.pitch+Math.PI/10)<1e-9);
+  assert.ok(Math.abs(player.pitch+LOOK.pitchDown)<1e-9);
   camera.fov=35;player.update(1/60);
-  assert.ok(player.pitch>=pitchBounds(35).min);
+  assert.equal(player.pitch,pitchBounds(35).min);
   player.dispose();delete globalThis.window;delete globalThis.document;
 });
 test('real canal fragments join into a polygon with five preserved islands',()=>{

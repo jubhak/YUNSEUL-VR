@@ -53,16 +53,36 @@ export const LOOK = {
   keyboardYawRate: 1.15,
   maxYawRate: 0.48,
   maxPitchRate: 0.32,
-  pitchDown: Math.PI / 10, // 18° downward; never point straight at the ground
-  pitchUp: Math.PI * 0.36, // 64.8° upward for the skyline
-  horizonMargin: Math.PI / 90, // keep horizon visible even at maximum zoom
+  // 휠·마우스 모두 하늘과 땅을 거의 끝까지 볼 수 있게 ±85°
+  pitchDown: (85 * Math.PI) / 180,
+  pitchUp: (85 * Math.PI) / 180,
+  horizonMargin: 0,
 
+  // 휠 1노치(≈100 deltaY)당 약 9°
+  wheelPitchGain: 0.0016,
   yawGain: 0.00008,
   pitchGain: 0.00005,
   fovDefault: 65,
   fovMin: 35,
   fovMax: 80,
   zoomStep: 2.5,
+};
+
+/** 해안·인천대교 연출 반경 (실제 해안선 좌표 기준 오프셋) */
+export const COAST = {
+  seaWidthM: 1900,
+  seaY: 0.02,
+  promenadeOffsetM: 18,
+  promenadeWidthM: 5.2,
+  bridgeDeckY: 46,
+};
+
+/** OSM way 376712704 (아트센터 인천) 중심 + 옥상 높이 — 도보 진입 목적지 */
+export const ARTS_CENTER = {
+  x: -963,
+  z: -108,
+  roofHeight: 42.89,
+  name: "아트센터 인천 옥상 테라스",
 };
 
 /**
@@ -72,11 +92,11 @@ export const LOOK = {
  */
 export const STREAM = {
   tileSizeM: 280,
-  bootRadius: 0, // 시작은 현재 타일만 대기
+  bootRadius: 0,
   loadRadius: 2,
-  preloadRadius: 3,
-  unloadRadius: 5,
-  maxConcurrentFetches: 4,
+  preloadRadius: 4,
+  unloadRadius: 7,
+  maxConcurrentFetches: 6,
   bootWaitMs: 18000, // 하드 상한 18초
 };
 

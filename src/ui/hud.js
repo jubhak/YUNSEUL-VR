@@ -10,6 +10,7 @@ export function createHud() {
       <div id="status" class="panel">
         <div class="row"><span class="label">모드</span><span data-field="mode">걷기</span></div>
         <div class="row"><span class="label">속도</span><span data-field="speed">0 km/h</span></div>
+        <div class="row"><span class="label">높이</span><span data-field="height">0 m</span></div>
         <div class="row"><span class="label">건물</span><span data-field="buildings">—</span></div>
         <div class="row"><span class="label">도로</span><span data-field="roads">—</span></div>
         <div class="row"><span class="label">타일</span><span data-field="tiles">—</span></div>
@@ -24,11 +25,12 @@ export function createHud() {
 
     <div id="help" class="panel">
       <strong>조작</strong><br/>
+      <b>마우스 휠 — 하늘 ↔ 땅 시선</b> (Shift+휠 — 화각)<br/>
       ↑ / ↓ — 앞 / 뒤 · ← / → — 시선 회전<br/>
       W/S — 앞/뒤 · A/D — 옆걸음 · 마우스 — 시점<br/>
-      휠 — 확대/축소<br/>
       Shift 가속 · Space 점프(걷기)<br/>
-      기본 걷기 · 1 / 2 / 3 — 속도 전환 (선택)
+      기본 걷기 · 1 / 2 / 3 — 속도 전환 (선택)<br/>
+      아트센터 인천 옥상까지 램프로 걸어 올라갈 수 있습니다.
     </div>
   `;
 
@@ -40,12 +42,12 @@ export function createHud() {
       <h1>송도,<br/>도시를 따라 걷다.</h1>
       <p class="subtitle">
         송도 센트럴파크 수변 산책로에서 시작합니다.
-        실제 지도 위에 햇살, 물결, 나무 그늘을 더했습니다.
+        실제 지도 위에 바다, 인천대교, 공원 조형물을 더했습니다.
       </p>
       <ul>
-        <li>실제 수로와 산책로 · 기본 지도 포함</li>
-        <li>수면 반사 · 유리 파사드 · 자연광과 그림자</li>
-        <li>안정적인 시선 · 하향 각도 제한</li>
+        <li>실제 수로·해안선·인천대교 · 기본 지도 포함</li>
+        <li>휠로 하늘과 땅을 ±85°까지 둘러보기</li>
+        <li>아트센터 인천 옥상 테라스 · 호수 전망</li>
       </ul>
       <div class="actions">
         <button class="action-btn primary" data-action="start" type="button">센트럴파크 입장</button>
@@ -62,6 +64,7 @@ export function createHud() {
   const fields = {
     mode: root.querySelector('[data-field="mode"]'),
     speed: root.querySelector('[data-field="speed"]'),
+    height: root.querySelector('[data-field="height"]'),
     buildings: root.querySelector('[data-field="buildings"]'),
     roads: root.querySelector('[data-field="roads"]'),
     tiles: root.querySelector('[data-field="tiles"]'),
@@ -99,9 +102,10 @@ export function createHud() {
     showOverlay() {
       overlay.classList.remove("hidden");
     },
-    setStats({ mode, speed, buildings, roads, tiles }) {
+    setStats({ mode, speed, buildings, roads, tiles, height }) {
       if (mode != null) fields.mode.textContent = mode;
       if (speed != null) fields.speed.textContent = `${speed.toFixed(0)} km/h`;
+      if (height != null) fields.height.textContent = `${height.toFixed(1)} m`;
       if (buildings != null) fields.buildings.textContent = String(buildings);
       if (roads != null) fields.roads.textContent = String(roads);
       if (tiles != null) fields.tiles.textContent = String(tiles);

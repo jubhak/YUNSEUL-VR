@@ -95,3 +95,77 @@ test('golf green and bunker areas are retained by the parser',()=>{
  const data={elements:[{type:'node',id:1,lon:0,lat:0},{type:'node',id:2,lon:10,lat:0},{type:'node',id:3,lon:10,lat:10},{type:'way',id:1,nodes:[1,2,3,1],tags:{golf:'bunker'}}]};
  const c=parseOsmCity(data,(lon,lat)=>({x:lon,z:lat}));assert.equal(c.parks[0].tags.golf,'bunker');
 });
+
+test('mouse wheel tilts the gaze from ground to sky instead of zooming',()=>fixture(p=>{
+  const wheel=deltaY=>{const e=new Event('wheel',{cancelable:true});Object.defineProperties(e,{deltaY:{value:deltaY},shiftKey:{value:false}});p.domElement.dispatchEvent(e);};
+  const fov=p.camera.fov;
+  wheel(-100);p.update(1/60);
+  assert.ok(p.pitch>0.1,'wheel up looks at the sky');
+  wheel(100);wheel(100);p.update(1/60);
+  assert.ok(p.pitch<0,'wheel down looks at the ground');
+  assert.equal(p.camera.fov,fov,'plain wheel must not change the field of view');
+  for(let i=0;i<60;i++)wheel(-100);
+  assert.ok(Math.abs(p.pitch-LOOK.pitchUp)<1e-9);
+  for(let i=0;i<120;i++)wheel(100);
+  assert.ok(Math.abs(p.pitch+LOOK.pitchDown)<1e-9);
+}));
+test('shift wheel keeps the old zoom behaviour',()=>fixture(p=>{
+  const fov=p.camera.fov;
+  const e=new Event('wheel',{cancelable:true});Object.defineProperties(e,{deltaY:{value:100},shiftKey:{value:true}});
+  p.domElement.dispatchEvent(e);
+  assert.equal(p.camera.fov,fov+LOOK.zoomStep);
+}));
+test('a rooftop platform lifts the eye height and lets the player walk on the roof',()=>fixture(p=>{
+  p.setPlatforms([{footprint:[{x:-10,z:-10},{x:10,z:-10},{x:10,z:10},{x:-10,z:10}],height:42.89}]);
+  p.position.set(0,1.7,0);p.update(1/60);
+  assert.ok(Math.abs(p.position.y-(42.89+1.7))<1e-6,'eye follows the roof surface');
+  p.keys.add('KeyW');tick(p,30);
+  assert.ok(Math.abs(p.position.y-(42.89+1.7))<1e-6,'stays on the roof while walking');
+  assert.ok(p.position.length()>1,'moved along the roof');
+  assert.ok(Math.abs(p.getGroundHeight()-42.89)<1e-6);
+}));
+test('a ramp platform interpolates height instead of stepping',()=>fixture(p=>{
+  p.setPlatforms([{footprint:[{x:0,z:-4},{x:60,z:-4},{x:60,z:4},{x:0,z:4}],ramp:{ax:0,az:0,h0:42.89,bx:60,bz:0,h1:0}}]);
+  p.position.set(0,1.7,0);p.update(1/60);
+  assert.ok(Math.abs(p.getGroundHeight()-42.89)<1e-6,'top of the ramp');
+  p.position.set(30,p.position.y,0);p.update(1/60);
+  assert.ok(Math.abs(p.getGroundHeight()-42.89/2)<1e-6,'mid ramp');
+  p.position.set(60,p.position.y,0);p.update(1/60);
+  assert.ok(Math.abs(p.getGroundHeight())<1e-6,'bottom of the ramp');
+}));
+test('standing on a roof does not collide with the building underneath',()=>{
+  const block={height:40,minX:-10,maxX:10,minZ:-10,maxZ:10,footprint:[{x:-10,z:-10},{x:10,z:-10},{x:10,z:10},{x:-10,z:10}],holes:[]};
+  const onRoof=resolveMovement({x:0,z:0},{x:8,z:0},[block],0.55,44.5);
+  assert.ok(Math.abs(onRoof.x-8)<1e-9,'walkable on top of the slab');
+  const atGrade=resolveMovement({x:-14,z:0},{x:0,z:0},[block],0.55,1.7);
+  assert.ok(atGrade.x<=-10.5,'still solid from street level');
+});
+test('coastline, Incheon Bridge and waterfront exports are present and sourced',()=>{
+  const coast=JSON.parse(fs.readFileSync('public/data/coastline.json'));
+  const bridge=JSON.parse(fs.readFileSync('public/data/incheon-bridge.json'));
+  assert.ok(coast.ways.length>=1);assert.ok(coast.ways.some(w=>w.length>100));
+  assert.ok(bridge.ways.length>=1);
+  assert.equal(bridge.pylons.length,2);
+  assert.ok(bridge.mastHeight>200&&bridge.mainSpan>=700);
+  assert.match(coast.license,/ODbL/);assert.match(bridge.license,/ODbL/);
+  assert.match(coast.source,/openstreetmap/);
+});
+test('G-Tower massing follows the photographed taper and sheared crown',()=>{
+  const g={id:'g',name:'G타워',height:146,footprint:[{x:-22,z:-20},{x:22,z:-20},{x:22,z:20},{x:-22,z:20}],holes:[]};
+  assert.equal(signatureKind(g),'g-tower');
+  const model=createSignatureBuilding(g);
+  model.updateMatrixWorld(true);
+  const bbox=new THREE.Box3().setFromObject(model);
+  assert.ok(bbox.max.y>140&&bbox.max.y<150,'145.8 m tall');
+  assert.ok(bbox.max.x-bbox.min.x>38,'full footprint at the base');
+});
+test('Arts Center model exposes a walkable roof terrace and a ramp',()=>{
+  const a={id:'a',name:'아트센터 인천',height:42.8,zone:'artscenter',footprint:[{x:-40,z:-30},{x:40,z:-30},{x:40,z:30},{x:-40,z:30}],holes:[]};
+  const model=createSignatureBuilding(a);
+  const platforms=model.userData.platforms;
+  assert.ok(platforms.length>=2);
+  const roof=platforms.find(p=>p.height);
+  assert.ok(roof&&Math.abs(roof.height-42.89)<0.3);
+  assert.ok(platforms.some(p=>p.ramp&&p.ramp.h0>40&&Math.abs(p.ramp.h1)<1e-9));
+  assert.ok(platforms.every(p=>p.footprint.length>=3));
+});
